@@ -1,0 +1,434 @@
+#include "raylib.h"
+#include "raygui.h"
+#include "screen_view.h"
+#include "core_runner.h"
+#include "config.h"
+#include "paths.h"
+#include "development/profile.h"
+#include "haiku_drop.h"
+#include "raylib_mouse.cpp"
+#include <iostream>
+#include <vector>
+#include <string>
+#include <sstream>
+#include <cerrno>
+#include <cstdlib>
+
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+
+// MSVC UTF-8 Support
+#ifdef _MSC_VER
+    #pragma execution_character_set("utf-8")
+#endif
+
+#ifdef _WIN32
+#include <windows.h>
+#include <io.h>
+#define access _access
+#define F_OK 0
+#undef CloseWindow
+#undef ShowCursor
+#undef DrawText
+#undef DrawTextEx
+
+// Resource IDs from m88m.rc
+#ifndef IDI_ICON1
+#define IDI_ICON1 1
+#endif
+#ifndef IDR_FONT_NOTOSANS
+#define IDR_FONT_NOTOSANS 101
+#endif
+#ifndef IDR_FONT_LATIN
+#define IDR_FONT_LATIN 102
+#endif
+#endif
+
+#ifdef M88_EMBED_FONT
+#include "embedded_font.h"
+#endif
+
+static Font LoadJapaneseFont() {
+    // Codepoints to load
+    std::vector<int> cp;
+    for (int i = 32; i < 127; i++) cp.push_back(i);
+    for (int i = 0x2000; i <= 0x206F; i++) cp.push_back(i); // General Punctuation
+    for (int i = 0x3000; i <= 0x30FF; i++) cp.push_back(i); // CJK Symbols, Hiragana, Katakana
+    for (int i = 0x4E00; i <= 0x9FFF; i++) cp.push_back(i); // CJK Unified Ideographs
+    for (int i = 0xFF00; i <= 0xFFEF; i++) cp.push_back(i); // Halfwidth and Fullwidth Forms
+
+    Font font = { 0 };
+
+#ifdef M88_EMBED_FONT
+    font = LoadFontFromMemory(".ttf", embedded_font_jp_data, (int)embedded_font_jp_size, 24, cp.data(), (int)cp.size());
+    if (IsFontValid(font) && font.glyphCount > 300) return font;
+#endif
+
+#ifdef _WIN32
+    // Try loading from Windows Resource first (embedded in exe)
+    // RT_RCDATA is (LPCSTR)10, MAKEINTRESOURCEA(id) is (LPCSTR)id
+    HRSRC hRes = FindResourceA(NULL, (LPCSTR)IDR_FONT_NOTOSANS, (LPCSTR)10);
+    if (hRes) {
+        HGLOBAL hData = LoadResource(NULL, hRes);
+        if (hData) {
+            void* pData = LockResource(hData);
+            unsigned int size = SizeofResource(NULL, hRes);
+            if (pData && size > 0) {
+                font = LoadFontFromMemory(".ttf", (const unsigned char*)pData, (int)size, 24, cp.data(), (int)cp.size());
+                if (IsFontValid(font) && font.glyphCount > 300) {
+                    return font;
+                }
+            }
+        }
+    }
+#endif
+
+    // Fallback: Try loading from external file or bundle
+    std::vector<std::string> fontCandidates;
+    
+#ifdef __APPLE__
+    // macOS: Look in the app bundle's Resources/fonts directory
+    const char* base = GetApplicationDirectory();
+    if (base) {
+        fontCandidates.push_back(std::string(base) + "fonts/NotoSansJP-Regular.ttf");
+    }
+#endif
+
+    fontCandidates.push_back("assets/NotoSansJP-Regular.ttf");
+    fontCandidates.push_back("../assets/NotoSansJP-Regular.ttf");
+    fontCandidates.push_back("../../assets/NotoSansJP-Regular.ttf");
+    
+    // Platform-specific system fonts for extra robustness
+#ifdef __APPLE__
+    fontCandidates.push_back("/System/Library/Fonts/Supplemental/Arial Unicode.ttf");
+    fontCandidates.push_back("/Library/Fonts/Arial Unicode.ttf");
+    fontCandidates.push_back("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc");
+#endif
+    
+    for (const auto& path : fontCandidates) {
+        if (access(path.c_str(), F_OK) == 0) {
+            font = LoadFontEx(path.c_str(), 24, cp.data(), (int)cp.size());
+            if (IsFontValid(font) && font.glyphCount > 300) return font;
+            if (IsFontValid(font)) UnloadFont(font);
+        }
+    }
+    
+    Font emptyFont = { 0 };
+    return emptyFont;
+}
+
+static Font LoadLatinFont() {
+    std::vector<int> cp;
+    for (int i = 32; i < 127; i++) cp.push_back(i);
+
+    Font font = { 0 };
+
+#ifdef M88_EMBED_FONT
+    font = LoadFontFromMemory(".ttf", embedded_font_latin_data, (int)embedded_font_latin_size, 16, cp.data(), (int)cp.size());
+    if (IsFontValid(font) && font.glyphCount > 50) return font;
+#endif
+
+#ifdef _WIN32
+    // Try loading from Windows Resource first (embedded in exe)
+    // RT_RCDATA is (LPCSTR)10, MAKEINTRESOURCEA(id) is (LPCSTR)id
+    HRSRC hRes = FindResourceA(NULL, (LPCSTR)IDR_FONT_LATIN, (LPCSTR)10);
+    if (hRes) {
+        HGLOBAL hData = LoadResource(NULL, hRes);
+        if (hData) {
+            void* pData = LockResource(hData);
+            unsigned int size = SizeofResource(NULL, hRes);
+            if (pData && size > 0) {
+                font = LoadFontFromMemory(".ttf", (const unsigned char*)pData, (int)size, 16, cp.data(), (int)cp.size());
+                if (IsFontValid(font) && font.glyphCount > 50) {
+                    return font;
+                }
+            }
+        }
+    }
+#endif
+
+    std::vector<std::string> candidates;
+#ifdef __APPLE__
+    const char* base = GetApplicationDirectory();
+    if (base) {
+        candidates.push_back(std::string(base) + "fonts/ChicagoKare-Regular.ttf");
+        candidates.push_back(std::string(base) + "../Resources/fonts/ChicagoKare-Regular.ttf");
+        candidates.push_back(std::string(base) + "Resources/fonts/ChicagoKare-Regular.ttf");
+    }
+#endif
+    candidates.push_back("assets/ChicagoKare-Regular.ttf");
+    candidates.push_back("../assets/ChicagoKare-Regular.ttf");
+    candidates.push_back("../../assets/ChicagoKare-Regular.ttf");
+
+    for (const auto& path : candidates) {
+        if (access(path.c_str(), F_OK) == 0) {
+            font = LoadFontEx(path.c_str(), 16, cp.data(), (int)cp.size());
+            if (IsFontValid(font) && font.glyphCount > 50) return font;
+            if (IsFontValid(font)) UnloadFont(font);
+        }
+    }
+
+    Font emptyFont = { 0 };
+    return emptyFont;
+}
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+static void TrySetUnixWindowIcon() {
+#ifdef M88_EMBED_APP_ICON
+    Image embeddedIcon = LoadImageFromMemory(".png", embedded_app_icon_png_data, (int)embedded_app_icon_png_size);
+    if (embeddedIcon.data != nullptr) {
+        SetWindowIcon(embeddedIcon);
+        UnloadImage(embeddedIcon);
+        return;
+    }
+#endif
+
+    std::vector<std::string> candidates;
+
+    const char* base = GetApplicationDirectory();
+    if (base) {
+        candidates.push_back(std::string(base) + "assets/AppIcon.png");
+        candidates.push_back(std::string(base) + "../share/icons/hicolor/512x512/apps/m88m.png");
+    }
+
+    candidates.push_back("assets/AppIcon.png");
+    candidates.push_back("../assets/AppIcon.png");
+    candidates.push_back("../../assets/AppIcon.png");
+    candidates.push_back("/usr/local/share/icons/hicolor/512x512/apps/m88m.png");
+    candidates.push_back("/usr/share/icons/hicolor/512x512/apps/m88m.png");
+
+    for (const auto& path : candidates) {
+        if (access(path.c_str(), F_OK) != 0) continue;
+
+        Image icon = LoadImage(path.c_str());
+        if (icon.data != nullptr) {
+            SetWindowIcon(icon);
+            UnloadImage(icon);
+            return;
+        }
+    }
+}
+#endif
+
+static bool ParseLoadAddress(const char* text, uint16_t* address) {
+    if (!text || !*text || !address) return false;
+    std::string value(text);
+    int base = 0;
+    if (value.size() > 1 && (value.back() == 'H' || value.back() == 'h')) {
+        value.pop_back();
+        base = 16;
+    }
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long parsed = std::strtoul(value.c_str(), &end, base);
+    if (errno != 0 || end == value.c_str() || *end != '\0' || parsed > 0xffff) return false;
+    *address = static_cast<uint16_t>(parsed);
+    return true;
+}
+
+int main() {
+#ifdef _WIN32
+    // The official raylib MSVC binary uses a different CRT flavour from this
+    // frontend. Redirecting stdout with freopen makes raylib's TraceLog use a
+    // foreign FILE object and fail-fast before the window opens.
+    SetTraceLogLevel(LOG_NONE);
+#endif
+    const int screenWidth = 640;
+    const int screenHeight = 424; // 400 (emulation) + 24 (status bar)
+
+    InitWindow(screenWidth, screenHeight, "M88V - PC-8001 / PC-8801 Emulator");
+    if (!IsWindowReady()) {
+        // OpenGL/window creation failed (e.g. no desktop GL driver on Windows
+        // on ARM, or a Raspberry Pi GPU that only provides OpenGL ES). Don't
+        // continue windowless; raylib would crash on the first GPU resource
+        // load. Report the failure and exit.
+#ifdef _WIN32
+        HMODULE user32 = GetModuleHandleA("user32.dll");
+        if (user32) {
+            typedef int (WINAPI *PFN_MessageBoxW)(HWND, LPCWSTR, LPCWSTR, UINT);
+            auto pfnMessageBox = (PFN_MessageBoxW)GetProcAddress(user32, "MessageBoxW");
+            if (pfnMessageBox) {
+                pfnMessageBox(NULL,
+                    L"Failed to initialize the graphics device (OpenGL).\n\n"
+                    L"On Windows on ARM, install the \"OpenCL, OpenGL, and Vulkan "
+                    L"Compatibility Pack\" from the Microsoft Store, then launch "
+                    L"M88M again.",
+                    L"M88M - Graphics initialization failed",
+                    0x10 /* MB_ICONERROR */);
+            }
+        }
+#else
+        std::cerr << "Failed to initialize the graphics device (OpenGL).\n"
+                     "M88M requires an OpenGL-capable display." << std::endl;
+#endif
+        return 1;
+    }
+#ifdef _WIN32
+    {
+        // compat.h defines NOUSER to avoid winuser.h conflicts with raylib,
+        // so LoadIcon/SendMessage are unavailable. Use GetProcAddress instead.
+        HWND hwnd = (HWND)GetWindowHandle();
+        HMODULE user32 = GetModuleHandleA("user32.dll");
+        if (hwnd && user32) {
+            typedef HICON (WINAPI *PFN_LoadIconW)(HINSTANCE, LPCWSTR);
+            typedef LRESULT (WINAPI *PFN_SendMessageW)(HWND, UINT, WPARAM, LPARAM);
+            auto pfnLoadIcon = (PFN_LoadIconW)GetProcAddress(user32, "LoadIconW");
+            auto pfnSendMsg  = (PFN_SendMessageW)GetProcAddress(user32, "SendMessageW");
+            if (pfnLoadIcon && pfnSendMsg) {
+                HICON hIcon = pfnLoadIcon(GetModuleHandle(NULL), (LPCWSTR)(ULONG_PTR)(WORD)IDI_ICON1);
+                if (hIcon) {
+                    pfnSendMsg(hwnd, 0x0080 /*WM_SETICON*/, 0 /*ICON_SMALL*/, (LPARAM)hIcon);
+                    pfnSendMsg(hwnd, 0x0080 /*WM_SETICON*/, 1 /*ICON_BIG*/, (LPARAM)hIcon);
+                }
+            }
+        }
+    }
+#elif !defined(__APPLE__)
+    TrySetUnixWindowIcon();
+#endif
+#ifdef __HAIKU__
+    HaikuInstallDropHandler();
+#endif
+    SetExitKey(0); // Disable ESC exit
+ 
+    Font fontJp = LoadJapaneseFont();
+    Font fontEn = LoadLatinFont();
+
+    RaylibDraw draw;
+    if (!draw.Init(640, 400, 8)) return 1;
+
+    const char* startupBinEnv = std::getenv("M88M_LOAD_BIN");
+    const std::string startupBin = startupBinEnv ? startupBinEnv : "";
+    uint16_t startupAddress = 0xc000;
+    const char* startupAddressEnv = std::getenv("M88M_LOAD_ADDRESS");
+    if (startupAddressEnv && !ParseLoadAddress(startupAddressEnv, &startupAddress)) {
+        std::fprintf(stderr, "[Startup] Invalid M88M_LOAD_ADDRESS: %s\n", startupAddressEnv);
+        startupAddress = 0xc000;
+    }
+    const char* startupMode = std::getenv("M88V_BASIC_MODE");
+    if (startupMode && *startupMode) {
+        auto& cfg = Config::Get();
+        if (!M88V::ParseBasicMode(startupMode, &cfg.basicmode)) {
+            std::fprintf(stderr, "[Startup] Invalid M88V_BASIC_MODE: %s\n", startupMode);
+            return 2;
+        }
+    }
+    if (!startupBin.empty()) {
+        // A development load must not silently switch a PC-88 session to N802.
+        // Without an explicit mode, retain the selected GUI machine.
+        auto& cfg = Config::Get();
+        cfg.clock = 40;
+        cfg.speed = 100;
+        cfg.mainsubratio = 1;
+    }
+
+    CoreRunner core;
+
+    if (IsFontValid(fontJp)) {
+        core.GetUIManager()->SetJPFont(fontJp);
+        SetTextureFilter(fontJp.texture, TEXTURE_FILTER_BILINEAR);
+    }
+    if (IsFontValid(fontEn)) {
+        core.GetUIManager()->SetENFont(fontEn);
+        SetTextureFilter(fontEn.texture, TEXTURE_FILTER_POINT);
+    }
+
+    const bool coreReady = core.Init(&draw);
+    if (!coreReady) {
+        // Continue even if init failed to show ROM error dialog
+    } else if (!startupBin.empty()) {
+        std::string loadMessage;
+        if (!core.LoadBinary(startupBin, startupAddress, &loadMessage)) {
+            std::fprintf(stderr, "[Startup] %s\n", loadMessage.c_str());
+        } else {
+            const std::string title = std::string("M88V - ") + M88V::MachineName(Config::Get().basicmode)
+                + " / " + M88V::BasicModeName(Config::Get().basicmode) + " Direct BIN Development";
+            SetWindowTitle(title.c_str());
+            std::fprintf(stdout, "[Startup] Loaded %s at %04XH\n", startupBin.c_str(), startupAddress);
+        }
+    }
+    core.Start();
+
+    SetTargetFPS(60);
+    bool shouldExit = false;
+
+    // Main game loop
+    while (!shouldExit)
+    {
+                if (WindowShouldClose()) {
+            if (Config::Get().flags & PC8801::Config::askbeforereset) {
+                core.GetUIManager()->RequestQuitConfirm();
+            } else {
+                shouldExit = true;
+            }
+        }
+        core.UpdateUI(shouldExit);
+        core.UpdateInput();
+
+#ifdef __HAIKU__
+        std::string haikuDroppedPath;
+        while (HaikuPollDroppedFile(haikuDroppedPath)) {
+            core.GetUIManager()->MountDisk(core.GetDiskManager(), haikuDroppedPath.c_str(), 0, 1);
+            if (Config::Get().flag2 & PC8801::Config::resetondrop) {
+                core.RequestReset();
+            }
+        }
+#endif
+
+        if (IsFileDropped()) {
+            FilePathList droppedFiles = LoadDroppedFiles();
+            if (droppedFiles.count > 0) {
+                core.GetUIManager()->MountDisk(core.GetDiskManager(), droppedFiles.paths[0], 0, 1);
+                if (Config::Get().flag2 & PC8801::Config::resetondrop) {
+                    core.RequestReset();
+                }
+            }
+            UnloadDroppedFiles(droppedFiles);
+        }
+
+        BeginDrawing();
+            ClearBackground(BLACK);
+            draw.Render();
+            core.DrawUI(shouldExit);
+
+            if (core.HasRomError()) {
+                float boxWidth = 500; float boxHeight = 360;
+                float x = (float)GetScreenWidth()/2 - boxWidth/2;
+                float y = (float)GetScreenHeight()/2 - boxHeight/2;
+                {
+                    Color bg = GetColor((unsigned)GuiGetStyle(DEFAULT, BACKGROUND_COLOR));
+                    bg.a = (unsigned char)(0.8f * 255);
+                    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), bg);
+                }
+                if (GuiWindowBox({ x, y, boxWidth, boxHeight }, "BIOS ROM Error")) shouldExit = true;
+                std::stringstream ss(core.GetRomError());
+                std::string line;
+                int lineY = (int)y + 60;
+                Color textColor = GetColor(GuiGetStyle(DEFAULT, TEXT_COLOR_NORMAL));
+                while (std::getline(ss, line, '\n')) {
+                    if (IsFontValid(fontEn)) {
+                        DrawTextEx(fontEn, line.c_str(), { x + 25, (float)lineY }, 16, 1, textColor);
+                    } else {
+                        DrawText(line.c_str(), (int)x + 25, lineY, 10, textColor);
+                    }
+                    lineY += 25;
+                }
+                if (GuiButton({ x + boxWidth/2 - 50, y + boxHeight - 50, 100, 30 }, "Exit")) shouldExit = true;
+            }
+        EndDrawing();
+    }
+
+    core.Stop();
+    draw.Cleanup();
+    if (IsFontValid(fontJp)) UnloadFont(fontJp);
+    if (IsFontValid(fontEn)) UnloadFont(fontEn);
+    CloseWindow();
+    return 0;
+}
+
+#ifdef _WIN32
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd) {
+    return main();
+}
+#endif

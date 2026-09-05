@@ -1,0 +1,470 @@
+#include <cstdio>
+#include "core_runner.h"
+#include "paths.h"
+#include "config.h"
+#include "opnif.h"
+#include "beep.h"
+#include "pc88/mouse.h"
+#include "pc88/joypad.h"
+#include "raylib_mouse.cpp"
+#include "raylib_pad.cpp"
+#include "devices/Z80.h"
+#include "pc88/memory.h"
+#include "screen_view.h"
+#include "file.h"
+#include "zlib/zlib.h"
+#include "development/rom_overlay.h"
+#include <cstdlib>
+#include <filesystem>
+#include <chrono>
+#include <thread>
+#include <mutex>
+#include <vector>
+#include <string.h>
+#include <string>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+
+namespace {
+    // Snapshot constants and header (moved from pc88.cpp)
+    #define SNAPSHOT_ID	"M88 SnapshotData"
+    enum { ssmajor = 1, ssminor = 1 };
+
+    struct SnapshotHeader {
+        char id[16];
+        uint8 major, minor;
+        int8 disk[2];
+        int datasize;
+        PC8801::Config::BASICMode basicmode;
+        int16 clock;
+        uint16 erambanks;
+        uint16 cpumode;
+        uint16 mainsubratio;
+        uint flags;
+        uint flag2;
+    };
+}
+
+CoreRunner::CoreRunner() : running(false), paused(false), configPending(false), configResetPending(false), resetPending(false) {}
+CoreRunner::~CoreRunner() { Stop(); }
+
+std::string CoreRunner::CheckMandatoryRoms(const std::string& romDir) {
+    M88V::RomOverlay roms;
+    std::string error;
+    const char* selected = std::getenv("M88V_N80_ROM");
+    roms.Prepare(romDir, selected ? selected : "", Config::Get().basicmode, &error);
+    return error;
+}
+
+bool CoreRunner::Init(Draw* draw) {
+    const std::string romDir = Paths::GetRomDir();
+    M88V::RomOverlay roms;
+    const char* selected = std::getenv("M88V_N80_ROM");
+    romError.clear();
+    if (!roms.Prepare(romDir, selected ? selected : "", Config::Get().basicmode, &romError)) return false;
+    if (!diskmgr.Init()) return false;
+    std::error_code ec;
+    const auto originalDirectory = std::filesystem::current_path(ec);
+    if (ec) { romError = "Cannot read working directory"; return false; }
+    const std::string overlayDirectory = roms.Directory();
+    std::filesystem::current_path(std::filesystem::u8path(overlayDirectory), ec);
+    if (ec) { romError = "Cannot enter ROM overlay"; return false; }
+    const bool ready = PC88::Init(draw, &diskmgr, &tapemgr, overlayDirectory.c_str());
+    std::filesystem::current_path(originalDirectory, ec);
+    if (ec || !ready) { romError = "M88 core initialization failed"; return false; }
+
+    ApplyConfig(&Config::Get());
+    Reset();
+    const uint outrate = (uint)Config::Get().sound;
+    int bufsize = (int)(Config::Get().soundbuffer * outrate / 1000);
+    if (bufsize < 1024) bufsize = 4096;
+    if (!coreSound.Init(this, outrate, bufsize)) return false;
+    coreSound.ApplyConfig(&Config::Get());
+    sound.Init(outrate, bufsize);
+    sound.SetVolume(&Config::Get());
+    sound.SetSource(coreSound.GetSoundSource());
+
+    static const IOBus::Connector c_sound[] = {
+        { pres, IOBus::portout, 0 },
+        { 0, 0, 0 }
+    };
+    bus1.Connect(&coreSound, c_sound);
+
+    GetOPN1()->Connect(&coreSound);
+    GetOPN2()->Connect(&coreSound);
+    GetBEEP()->Connect(&coreSound);
+
+    // Connect mouse
+    RaylibMouseUI* mouseUI = new RaylibMouseUI();
+    this->mouse->Connect(mouseUI);
+
+    // Connect Joypad
+    RaylibPadBridge* padBridge = new RaylibPadBridge();
+    this->GetJoyPad()->Connect(padBridge);
+    
+    keyInput.Init(&bus1);
+    uiManager.Init();
+    return true;
+}
+
+void CoreRunner::StopAudio() {
+    sound.SetSource(nullptr);
+    sound.Cleanup();
+    coreSound.Cleanup();
+}
+
+void CoreRunner::RestartAudio() {
+    const auto& cfg = Config::Get();
+    const uint outrate = (uint)cfg.sound;
+    int bufsize = (int)(cfg.soundbuffer * outrate / 1000);
+    if (bufsize < 1024) bufsize = 4096;
+    
+    if (coreSound.Init(this, outrate, bufsize)) {
+        coreSound.ApplyConfig(&cfg);
+        sound.Init(outrate, bufsize);
+        sound.SetVolume(&cfg);
+        sound.SetSource(coreSound.GetSoundSource());
+        GetOPN1()->Connect(&coreSound);
+        GetOPN2()->Connect(&coreSound);
+        GetBEEP()->Connect(&coreSound);
+    }
+}
+
+void CoreRunner::RequestConfigApply(const PC8801::Config& cfg, bool requireReset) {
+    std::lock_guard<std::mutex> lock(configMutex);
+    pendingConfig = cfg;
+    configPending = true;
+    configResetPending = requireReset;
+}
+
+void CoreRunner::RequestReset() {
+    resetPending = true;
+}
+
+bool CoreRunner::LoadBinary(const std::string& path, uint16_t address, std::string* message) {
+    std::lock_guard<std::mutex> lock(stateMutex);
+
+    FileIO input;
+    if (!input.Open(path.c_str(), FileIO::readonly)) {
+        if (message) *message = "Cannot open BIN: " + path;
+        return false;
+    }
+    if (!input.Seek(0, FileIO::end)) {
+        if (message) *message = "Cannot determine BIN size: " + path;
+        return false;
+    }
+    const int32 size = input.Tellp();
+    constexpr uint32 launcherAddress = 0xeff0;
+    if (size <= 0) {
+        if (message) *message = "BIN is empty: " + path;
+        return false;
+    }
+    const uint32 end = static_cast<uint32>(address) + static_cast<uint32>(size);
+    if (end > launcherAddress) {
+        if (message) *message = "BIN overlaps the EFF0H launcher";
+        return false;
+    }
+    if (!input.Seek(0, FileIO::begin)) {
+        if (message) *message = "Cannot seek BIN: " + path;
+        return false;
+    }
+
+    std::vector<uint8> bytes(static_cast<size_t>(size));
+    if (input.Read(bytes.data(), size) != size) {
+        if (message) *message = "Cannot read complete BIN: " + path;
+        return false;
+    }
+
+    uint8* ram = GetMem1()->GetRAM();
+    memcpy(ram + address, bytes.data(), bytes.size());
+
+    // LD SP,F000 / CALL address / JP 0000. This is the same handoff used by
+    // the deterministic headless frontend and leaves EFF0H-EFFFH reserved.
+    const uint8 launcher[] = {
+        0x31, 0x00, 0xf0,
+        0xcd, static_cast<uint8>(address & 0xff), static_cast<uint8>(address >> 8),
+        0xc3, 0x00, 0x00,
+    };
+    memcpy(ram + launcherAddress, launcher, sizeof(launcher));
+    GetCPU1()->SetPC(launcherAddress);
+    if (message) *message = "BIN loaded";
+    return true;
+}
+
+bool CoreRunner::SaveState(const std::string& path, const std::string& screenshotPath, std::string* message) {
+    std::lock_guard<std::mutex> lock(stateMutex);
+    
+    bool ok = false;
+    const PC8801::Config& config = Config::Get();
+    const bool docomp = !!(config.flag2 & PC8801::Config::compresssnapshot);
+    const uint size = devlist.GetStatusSize();
+    const uLongf maxCompressed = compressBound(size);
+    std::vector<uint8> state(size);
+    std::vector<uint8> payload(docomp ? maxCompressed + 4 : size);
+
+    if (devlist.SaveStatus(state.data())) {
+        uLongf payloadSize = size;
+        const uint8* payloadData = state.data();
+        bool stepOk = true;
+
+        if (docomp) {
+            uLongf compressedSize = maxCompressed;
+            if (compress(payload.data() + 4, &compressedSize, state.data(), size) == Z_OK) {
+                *(int32*)payload.data() = -(int32)compressedSize;
+                payloadSize = compressedSize + 4;
+                payloadData = payload.data();
+            } else {
+                stepOk = false;
+            }
+        }
+
+        if (stepOk) {
+            SnapshotHeader ssh;
+            memset(&ssh, 0, sizeof(ssh));
+            memcpy(ssh.id, SNAPSHOT_ID, 16);
+            ssh.major = ssmajor;
+            ssh.minor = ssminor;
+            ssh.datasize = (int)size;
+            ssh.basicmode = config.basicmode;
+            ssh.clock = (int16)config.clock;
+            ssh.erambanks = (uint16)config.erambanks;
+            ssh.cpumode = (uint16)config.cpumode;
+            ssh.mainsubratio = (uint16)config.mainsubratio;
+            ssh.flags = config.flags | (payloadSize < size ? 0x80000000u : 0);
+            ssh.flag2 = config.flag2;
+            for (uint i = 0; i < 2; i++)
+                ssh.disk[i] = (int8)diskmgr.GetCurrentDisk(i);
+
+            FileIO file;
+            if (file.CreateNew(path.c_str())) {
+                if (file.Write(&ssh, sizeof(ssh)) == sizeof(ssh) &&
+                    file.Write(payloadData, (int32)payloadSize) == (int32)payloadSize) {
+                    ok = true;
+                }
+            }
+        }
+    }
+
+    if (ok && !screenshotPath.empty()) {
+        if (RaylibDraw* rayDraw = dynamic_cast<RaylibDraw*>(draw)) {
+            rayDraw->SavePNG(screenshotPath.c_str());
+        }
+    }
+    if (message) *message = ok ? "State saved" : "Failed to save state";
+    return ok;
+}
+
+bool CoreRunner::LoadState(const std::string& path, std::string* message) {
+    std::lock_guard<std::mutex> lock(stateMutex);
+    
+    bool ok = false;
+    PC8801::Config cfg = Config::Get();
+    FileIO file;
+
+    if (file.Open(path.c_str(), FileIO::readonly)) {
+        SnapshotHeader ssh;
+        if (file.Read(&ssh, sizeof(ssh)) == sizeof(ssh) &&
+            memcmp(ssh.id, SNAPSHOT_ID, 16) == 0 &&
+            ssh.major == ssmajor && ssh.minor <= ssminor) {
+
+            const uint fl1a = PC8801::Config::subcpucontrol | PC8801::Config::fullspeed
+                            | PC8801::Config::enableopna	| PC8801::Config::enablepcg
+                            | PC8801::Config::fv15k 		| PC8801::Config::cpuburst
+                            | PC8801::Config::cpuclockmode	| PC8801::Config::digitalpalette
+                            | PC8801::Config::opnona8		| PC8801::Config::opnaona8
+                            | PC8801::Config::enablewait;
+            const uint fl2a = PC8801::Config::disableopn44;
+
+            cfg.flags = (cfg.flags & ~fl1a) | (ssh.flags & fl1a);
+            cfg.flag2 = (cfg.flag2 & ~fl2a) | (ssh.flag2 & fl2a);
+            cfg.basicmode = ssh.basicmode;
+            cfg.clock = ssh.clock;
+            cfg.erambanks = ssh.erambanks;
+            cfg.cpumode = ssh.cpumode;
+            cfg.mainsubratio = ssh.mainsubratio;
+
+            ApplyConfig(&cfg);
+            Reset();
+
+            std::vector<uint8> state((size_t)ssh.datasize);
+            bool dataRead = false;
+            if (ssh.flags & 0x80000000u) {
+                int32 csize = 0;
+                if (file.Read(&csize, 4) == 4 && csize < 0) {
+                    csize = -csize;
+                    std::vector<uint8> compressed((size_t)csize);
+                    if (file.Read(compressed.data(), csize) == csize) {
+                        uLongf destSize = (uLongf)ssh.datasize;
+                        dataRead = uncompress(state.data(), &destSize, compressed.data(), (uLongf)csize) == Z_OK
+                                && destSize == (uLongf)ssh.datasize;
+                    }
+                }
+            } else {
+                dataRead = file.Read(state.data(), ssh.datasize) == ssh.datasize;
+            }
+
+            if (dataRead) {
+                if (devlist.LoadStatus(state.data())) {
+                    ok = true;
+                } else {
+                    Reset();
+                }
+            }
+        }
+    }
+
+    if (ok) {
+        coreSound.ApplyConfig(&cfg);
+        sound.SetVolume(&cfg);
+        Config::Get() = cfg;
+        Config::Save(cfg);
+        UpdateScreen(true);
+    }
+    if (message) *message = ok ? "State loaded" : "Failed to load state";
+    return ok;
+}
+
+void CoreRunner::UpdateInput() {
+    if (!uiManager.IsMenuOpen()) {
+        if (running) keyInput.Update();
+    }
+}
+
+void CoreRunner::UpdateUI(bool& shouldExit) {
+    uiManager.Update(shouldExit, this, this);
+}
+
+void CoreRunner::DrawUI(bool& shouldExit) {
+    uiManager.Draw(&diskmgr, Config::Get(), this, this, shouldExit);
+}
+
+void CoreRunner::Start() {
+    if (running || HasRomError()) return;
+    running = true;
+    sound.Start();
+    thread = std::thread(&CoreRunner::Run, this);
+}
+
+void CoreRunner::Stop() {
+    if (running) {
+        running = false;
+        if (thread.joinable()) thread.join();
+    }
+    StopAudio();
+}
+
+void CoreRunner::Pause(bool p) { paused = p; }
+
+void CoreRunner::Run() {
+    auto startTime = std::chrono::high_resolution_clock::now();
+    uint64_t totalTicksEmulated = 0;
+    bool audioPaused = false;
+
+    while (running) {
+        if (paused || uiManager.IsMenuOpen()) {
+            if (!audioPaused) {
+                sound.Pause(true);
+                audioPaused = true;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            startTime = std::chrono::high_resolution_clock::now();
+            totalTicksEmulated = 0;
+            continue;
+        }
+
+        if (audioPaused) {
+            sound.Pause(false);
+            audioPaused = false;
+        }
+
+        int actualTicks = 0;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex);
+
+            if (resetPending.exchange(false)) {
+                // Apply latest config before reset to ensure hardware changes are picked up
+                ApplyConfig(&Config::Get());
+                
+                // Re-initialize audio if sampling rate or buffer size changed
+                uint32 currentRate = (uint32)Config::Get().sound;
+                int currentBufMs = (int)Config::Get().soundbuffer;
+                static uint32 lastRate = 0;
+                static int lastBufMs = 0;
+                
+                if (currentRate != lastRate || currentBufMs != lastBufMs) {
+                    int samples = (int)(currentRate * currentBufMs / 1000);
+                    if (samples < 1024) samples = 4096;
+                    coreSound.Init(this, currentRate, samples);
+                    sound.Cleanup();
+                    sound.Init(currentRate, samples);
+                    sound.Start();
+                    lastRate = currentRate;
+                    lastBufMs = currentBufMs;
+                }
+
+                Reset();
+                sound.ClearBuffer();
+                startTime = std::chrono::high_resolution_clock::now();
+                totalTicksEmulated = 0;
+            }
+
+            if (configPending) {
+                // Check if audio settings changed
+                const auto& oldCfg = Config::Get();
+                if (pendingConfig.sound != oldCfg.sound || pendingConfig.soundbuffer != oldCfg.soundbuffer) {
+                    StopAudio();
+                    // Update config before restart to ensure correct params
+                    Config::Get() = pendingConfig; 
+                    RestartAudio();
+                }
+
+                ApplyConfig(&pendingConfig);
+                coreSound.ApplyConfig(&pendingConfig);
+                sound.SetVolume(&pendingConfig);
+                if (configResetPending) {
+                    Reset();
+                }
+                Config::Get() = pendingConfig;
+                Config::Save(pendingConfig);
+                configPending = false;
+            }
+
+            // Run one frame (1/60s)
+            const auto& cfg = Config::Get();
+            uint32_t clockParam = cfg.clock;
+            uint32_t speedParam = clockParam * (cfg.speed > 0 ? cfg.speed : 100) / 100;
+            uint32_t ticksToRun = GetFramePeriod();
+
+            TimeSync();
+            actualTicks = Proceed(ticksToRun, clockParam, speedParam);
+            UpdateScreen(true);
+        }
+
+        totalTicksEmulated += actualTicks;
+
+        // Synchronization
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        auto elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(currentTime - startTime).count();
+        const auto& syncCfg = Config::Get();
+        float speedMultiplier = (syncCfg.speed > 0 ? syncCfg.speed : 100) / 100.0f;
+        uint64_t targetUs = (uint64_t)(totalTicksEmulated * 10 / speedMultiplier);
+
+        if (elapsedUs < targetUs) {
+            uint64_t waitUs = targetUs - elapsedUs;
+            if (waitUs > 1000) {
+                std::this_thread::sleep_for(std::chrono::microseconds(waitUs - 500));
+            }
+            // Busy wait for precision
+            while (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - startTime).count() < targetUs) {
+                std::this_thread::yield();
+            }
+        }
+
+        // Periodic reset to prevent drift
+        if (totalTicksEmulated > 500000) { // 5 seconds
+            startTime = std::chrono::high_resolution_clock::now();
+            totalTicksEmulated = 0;
+        }
+    }
+}

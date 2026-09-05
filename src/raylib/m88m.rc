@@ -1,0 +1,15 @@
+// M88M Windows Resource File
+#include <windows.h>
+
+// ID for the icon and font resource
+#define IDI_ICON1         1
+#define IDR_FONT_NOTOSANS 101
+#define IDR_FONT_LATIN    102
+
+// App Icon
+IDI_ICON1 ICON "../../assets/AppIcon.ico"
+
+// Embed fonts as custom user-defined resource type "RCDATA"
+// Path is relative to this .rc file (src/raylib/m88m.rc)
+IDR_FONT_NOTOSANS RCDATA "../../assets/NotoSansJP-Regular.ttf"
+IDR_FONT_LATIN    RCDATA "../../assets/ChicagoKare-Regular.ttf"

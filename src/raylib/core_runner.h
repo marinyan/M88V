@@ -1,0 +1,67 @@
+#pragma once
+
+#include "pc88.h"
+#include "sound.h"
+#include "diskmgr.h"
+#include "tapemgr.h"
+#include "audio_out.h"
+#include "key_input.h"
+#include "disk_dialog.h" // Actually UIManager now
+#include <thread>
+#include <atomic>
+#include <string>
+#include <mutex>
+
+class CoreRunner : public PC88 {
+public:
+    CoreRunner();
+    virtual ~CoreRunner();
+
+    bool Init(Draw* draw);
+    void Start();
+    void Stop();
+    void Pause(bool pause);
+    void UpdateInput();
+    void UpdateUI(bool& shouldExit);
+    void DrawUI(bool& shouldExit);
+    void RequestReset();
+    bool LoadBinary(const std::string& path, uint16_t address = 0xc000, std::string* message = nullptr);
+    bool SaveState(const std::string& path, const std::string& screenshotPath = "", std::string* message = nullptr);
+    bool LoadState(const std::string& path, std::string* message = nullptr);
+    
+    // Thread-safe config update
+    void RequestConfigApply(const PC8801::Config& cfg, bool requireReset = false);
+    void StopAudio();
+    void RestartAudio();
+
+    PC88* GetPC88() { return this; }
+    DiskManager* GetDiskManager() { return &diskmgr; }
+    UIManager* GetUIManager() { return &uiManager; }
+    bool HasRomError() const { return !romError.empty(); }
+    const std::string& GetRomError() const { return romError; }
+    void ClearRomError() { romError.clear(); }
+
+private:
+    void Run();
+    std::string CheckMandatoryRoms(const std::string& romDir);
+
+    DiskManager diskmgr;
+    TapeManager tapemgr;
+    PC8801::Sound coreSound;
+    RaylibSound sound;
+    KeyInput keyInput;
+    UIManager uiManager;
+    
+    std::thread thread;
+    std::atomic<bool> running;
+    std::atomic<bool> paused;
+    std::string romError;
+
+    // Config deferred application
+    std::mutex configMutex;
+    PC8801::Config pendingConfig;
+    std::atomic<bool> configPending;
+    std::atomic<bool> configResetPending;
+    std::atomic<bool> resetPending;
+    std::mutex stateMutex;
+};

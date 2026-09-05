@@ -1,0 +1,517 @@
+cmake_minimum_required(VERSION 3.20)
+project(M88M
+    VERSION 1.2.0
+    LANGUAGES CXX C
+    DESCRIPTION "PC-8801 emulator (M88 改) — raylib frontend"
+)
+
+# --- Global settings -----------------------------------------------------
+set(M88M_VERSION "${M88M_VERSION_MAJOR}.${M88M_VERSION_MINOR}.${M88M_VERSION_PATCH}")
+option(M88M_BUILD_GUI "Build the raylib GUI frontend" ON)
+option(M88M_BUILD_HEADLESS "Build the deterministic headless API frontend" ON)
+set(MACOSX_BUNDLE_MINIMUM_SYSTEM_VERSION "13.5")
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_C_STANDARD 11)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+if(APPLE)
+    # Single-arch by default; pass -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+    # at configure time for a universal binary.
+    if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "13.5" CACHE STRING "" FORCE)
+    endif()
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)
+endif()
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "" FORCE)
+endif()
+
+set(M88M_IS_FREEBSD FALSE)
+set(M88M_IS_HAIKU FALSE)
+set(M88M_IS_LINUX FALSE)
+if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+    set(M88M_IS_FREEBSD TRUE)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Haiku")
+    set(M88M_IS_HAIKU TRUE)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(M88M_IS_LINUX TRUE)
+endif()
+
+# When targeting Raspberry Pi OS (armhf/arm64), build raylib for GLES 2.0 and
+# name the packages with a "raspios" platform token so they are clearly
+# distinct from the generic desktop-GL Linux builds. The Pi's Mesa V3D driver
+# tops out at OpenGL 3.1, so a desktop GL 3.3 context fails at window creation
+# (GLXBadFBConfig) even on 64-bit Pi OS — GLES is required on both armhf and
+# arm64.
+option(M88M_RASPIOS "Target Raspberry Pi OS (force GLES 2.0, raspios package naming)" OFF)
+
+# FMGEN's table maths rely on type-punning; -fno-strict-aliasing keeps the
+# emitted code identical to the MSVC original.
+if(MSVC)
+    add_compile_options(
+        /wd4244 /wd4267 /wd4018 /wd4100 /wd4800 /wd4091 /wd4996
+    )
+else()
+    add_compile_options(
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-strict-aliasing>
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wno-multichar>
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wno-deprecated-declarations>
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wno-narrowing>
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-fpermissive>
+    )
+endif()
+
+# --- zlib ---------------------------------------------------------------
+find_package(ZLIB QUIET)
+if(NOT ZLIB_FOUND)
+    message(STATUS "System zlib not found — using bundled src/zlib")
+    file(GLOB ZLIB_SRC src/zlib/*.c)
+    add_library(m88_zlib STATIC ${ZLIB_SRC})
+    target_include_directories(m88_zlib PUBLIC src/zlib)
+    add_library(ZLIB::ZLIB ALIAS m88_zlib)
+endif()
+
+# --- Emulation core (m88core) -------------------------------------------
+file(GLOB COMMON_SRC  src/common/*.cpp)
+file(GLOB DEVICES_SRC src/devices/*.cpp)
+file(GLOB PC88_SRC    src/pc88/*.cpp)
+
+# Drop sources that don't belong in the portable core build.
+list(FILTER DEVICES_SRC EXCLUDE REGEX "Z80_x86\\.cpp$")
+list(FILTER DEVICES_SRC EXCLUDE REGEX "Z80Test\\.cpp$")
+list(FILTER DEVICES_SRC EXCLUDE REGEX "Z80Debug\\.cpp$")
+# list(FILTER DEVICES_SRC EXCLUDE REGEX "z80diag\\.cpp$")
+list(FILTER PC88_SRC    EXCLUDE REGEX "memview\\.cpp$")
+list(FILTER PC88_SRC    EXCLUDE REGEX "ioview\\.cpp$")
+
+add_library(m88core STATIC
+    ${COMMON_SRC}
+    ${DEVICES_SRC}
+    ${PC88_SRC}
+)
+
+target_include_directories(m88core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/pc88
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/devices
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/if
+)
+
+target_compile_definitions(m88core PUBLIC
+    M88_NO_Z80_X86
+    M88_PORTABLE
+)
+
+target_link_libraries(m88core PUBLIC ZLIB::ZLIB)
+
+# Shared machine selection and ROM handling for both development frontends.
+add_library(m88_development STATIC src/development/rom_overlay.cpp)
+target_link_libraries(m88_development PUBLIC m88core)
+
+# --- deterministic headless frontend -----------------------------------
+if(M88M_BUILD_HEADLESS)
+    add_executable(m88_headless
+        src/headless/headless_draw.cpp
+        src/headless/headless_machine.cpp
+        src/headless/http_server.cpp
+        src/headless/matrix_keyboard.cpp
+        src/headless/main.cpp
+    )
+    set_target_properties(m88_headless PROPERTIES OUTPUT_NAME "m88-headless")
+    target_include_directories(m88_headless PRIVATE src/headless)
+    target_link_libraries(m88_headless PRIVATE m88_development)
+    if(WIN32)
+        target_compile_definitions(m88_headless PRIVATE WIN32_LEAN_AND_MEAN)
+        target_link_libraries(m88_headless PRIVATE ws2_32)
+    elseif(UNIX)
+        target_link_libraries(m88_headless PRIVATE pthread m)
+    endif()
+
+    include(CTest)
+    if(BUILD_TESTING)
+        add_test(NAME m88_headless_self_test COMMAND m88_headless --self-test)
+
+        add_executable(z80_wait_test src/tests/z80_wait_test.cpp)
+        target_link_libraries(z80_wait_test PRIVATE m88core)
+        add_test(NAME z80_wait_test COMMAND z80_wait_test)
+        add_executable(development_profile_test src/tests/development_profile_test.cpp)
+        target_link_libraries(development_profile_test PRIVATE m88_development)
+        add_test(NAME development_profile_test COMMAND development_profile_test)
+    endif()
+endif()
+
+# --- raylib ------------------------------------------------------------
+if(M88M_BUILD_GUI)
+include(FetchContent)
+
+# Automatically select binary URL based on platform/arch
+if(TARGET raylib)
+    message(STATUS "Using system raylib")
+elseif(APPLE)
+    # raylib 6.0 release uses a universal binary for macOS
+    set(RAYLIB_BINARY_URL "https://github.com/raysan5/raylib/releases/download/6.0/raylib-6.0_macos.tar.gz")
+elseif(WIN32)
+    if(CMAKE_GENERATOR_PLATFORM MATCHES "ARM64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
+        set(RAYLIB_BINARY_URL "https://github.com/raysan5/raylib/releases/download/6.0/raylib-6.0_winarm64_msvc16.zip")
+    elseif(CMAKE_GENERATOR_PLATFORM MATCHES "Win32" OR CMAKE_SIZEOF_VOID_P EQUAL 4)
+        set(RAYLIB_BINARY_URL "https://github.com/raysan5/raylib/releases/download/6.0/raylib-6.0_win32_msvc16.zip")
+    elseif(MSVC)
+        set(RAYLIB_BINARY_URL "https://github.com/raysan5/raylib/releases/download/6.0/raylib-6.0_win64_msvc16.zip")
+    else()
+        set(RAYLIB_BINARY_URL "https://github.com/raysan5/raylib/releases/download/6.0/raylib-6.0_win64_mingw-w64.zip")
+    endif()
+elseif(M88M_IS_LINUX AND NOT M88M_RASPIOS)
+    # The Raspberry Pi builds (M88M_RASPIOS) must not use these prebuilt
+    # binaries: they are compiled for desktop OpenGL (wrong for the Pi's GPU)
+    # and against a newer glibc than Raspberry Pi OS ships. Leaving
+    # RAYLIB_BINARY_URL unset makes the block below build raylib from source
+    # with GLES 2.0 instead.
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
+        set(RAYLIB_BINARY_URL "https://github.com/raysan5/raylib/releases/download/6.0/raylib-6.0_linux_amd64.tar.gz")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+        set(RAYLIB_BINARY_URL "https://github.com/raysan5/raylib/releases/download/6.0/raylib-6.0_linux_arm64.tar.gz")
+    endif()
+endif()
+
+if(TARGET raylib)
+    # System raylib was found above.
+elseif(RAYLIB_BINARY_URL)
+    message(STATUS "Downloading raylib binary: ${RAYLIB_BINARY_URL}")
+    FetchContent_Declare(
+        raylib_bin
+        URL ${RAYLIB_BINARY_URL}
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+    FetchContent_MakeAvailable(raylib_bin)
+
+    add_library(raylib STATIC IMPORTED GLOBAL)
+    if(MSVC)
+        set_target_properties(raylib PROPERTIES
+            IMPORTED_LOCATION "${raylib_bin_SOURCE_DIR}/lib/raylib.lib"
+            INTERFACE_INCLUDE_DIRECTORIES "${raylib_bin_SOURCE_DIR}/include"
+        )
+    else()
+        set_target_properties(raylib PROPERTIES
+            IMPORTED_LOCATION "${raylib_bin_SOURCE_DIR}/lib/libraylib.a"
+            INTERFACE_INCLUDE_DIRECTORIES "${raylib_bin_SOURCE_DIR}/include"
+        )
+    endif()
+else()
+    message(STATUS "No pre-compiled binary for this platform. Falling back to source build.")
+    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(BUILD_GAMES    OFF CACHE BOOL "" FORCE)
+    set(SUPPORT_MODULE_RAUDIO  ON  CACHE BOOL "" FORCE)
+    set(SUPPORT_MODULE_RMODELS OFF CACHE BOOL "" FORCE)
+
+    # raylib's default desktop backend uses GLFW/X11 when building from
+    # source. Haiku has no X11 in the CI image, so use raylib's SDL backend.
+    if(M88M_IS_HAIKU)
+        set(PLATFORM "SDL" CACHE STRING "" FORCE)
+    endif()
+
+    # Raspberry Pi (and other ARM boards) expose OpenGL ES rather than full
+    # desktop GL. A desktop GL 3.3 context fails at window creation on the Pi's
+    # GPU (GLXBadFBConfig), so build raylib for GLES 2.0 on ARM Linux. raylib's
+    # desktop backend then requests a GLES2 context via EGL, which the Pi's
+    # Mesa driver supports. armhf matches "arm"; the 64-bit Pi build reports
+    # "aarch64" (which does not match "arm"), so M88M_RASPIOS forces GLES there.
+    if(M88M_IS_LINUX AND (M88M_RASPIOS OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm"))
+        set(OPENGL_VERSION "ES 2.0" CACHE STRING "" FORCE)
+    endif()
+
+    FetchContent_Declare(
+        raylib
+        GIT_REPOSITORY https://github.com/raysan5/raylib.git
+        GIT_TAG        6.0
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_MakeAvailable(raylib)
+    if(M88M_IS_HAIKU)
+        target_compile_options(raylib PRIVATE
+            -include "${CMAKE_CURRENT_SOURCE_DIR}/src/raylib/haiku_raylib_compat.h"
+        )
+    endif()
+endif()
+
+include(FetchContent)
+FetchContent_Declare(
+    raygui
+    GIT_REPOSITORY https://github.com/raysan5/raygui.git
+    GIT_TAG        2d648ea0fe48bf1667b4e8d6fcedabd56003a702
+    GIT_SHALLOW    FALSE
+)
+FetchContent_MakeAvailable(raygui)
+
+# raygui ships a single header; expose its include dir as an interface lib.
+add_library(raygui INTERFACE)
+target_include_directories(raygui INTERFACE ${raygui_SOURCE_DIR}/src)
+
+# --- nativefiledialog-extended -----------------------------------------
+if(NOT M88M_IS_HAIKU)
+    FetchContent_Declare(
+        nfd
+        GIT_REPOSITORY https://github.com/btzy/nativefiledialog-extended.git
+        GIT_TAG        v1.2.1
+    )
+    FetchContent_MakeAvailable(nfd)
+endif()
+
+# --- raylib frontend executable ----------------------------------------
+file(GLOB RAYLIB_FRONT_SRC src/raylib/*.cpp)
+set(M88M_FONT_RESOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/NotoSansJP-Regular.ttf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/ChicagoKare-Regular.ttf"
+)
+set(M88M_FONT_LICENSE_RESOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/OFL.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/NOTICE.md"
+)
+
+if(WIN32)
+    list(APPEND RAYLIB_FRONT_SRC src/raylib/m88m.rc)
+endif()
+
+if(RAYLIB_FRONT_SRC)
+    if(APPLE OR UNIX OR M88M_IS_HAIKU)
+        find_package(Iconv REQUIRED)
+    endif()
+
+    if(APPLE)
+        add_executable(m88_raylib MACOSX_BUNDLE ${RAYLIB_FRONT_SRC})
+
+        # macOS bundle resources
+        set_source_files_properties(${M88M_FONT_RESOURCES} ${M88M_FONT_LICENSE_RESOURCES} PROPERTIES
+            MACOSX_PACKAGE_LOCATION "Resources/fonts")
+        target_sources(m88_raylib PRIVATE ${M88M_FONT_RESOURCES} ${M88M_FONT_LICENSE_RESOURCES})
+
+        set_target_properties(m88_raylib PROPERTIES
+            OUTPUT_NAME "M88M"
+            MACOSX_BUNDLE_GUI_IDENTIFIER "com.bubio.m88m"
+            MACOSX_BUNDLE_BUNDLE_NAME "M88M"
+            MACOSX_BUNDLE_BUNDLE_VERSION "${M88M_VERSION}"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "${M88M_VERSION}"
+            MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/src/raylib/Info.plist.in"
+        )
+    else()
+        if(WIN32)
+            add_executable(m88_raylib WIN32 ${RAYLIB_FRONT_SRC})
+        else()
+            add_executable(m88_raylib ${RAYLIB_FRONT_SRC})
+        endif()
+        set_target_properties(m88_raylib PROPERTIES OUTPUT_NAME "m88m")
+
+        if(NOT M88M_IS_HAIKU)
+            # Copy assets to the output directory so the executable can find them
+            add_custom_command(TARGET m88_raylib POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/assets
+                $<TARGET_FILE_DIR:m88_raylib>/assets
+                COMMENT "Copying assets to output directory..."
+            )
+        endif()
+    endif()
+
+    target_link_libraries(m88_raylib PRIVATE m88_development raylib raygui)
+    if(NOT M88M_IS_HAIKU)
+        target_link_libraries(m88_raylib PRIVATE nfd)
+    endif()
+
+    if(M88M_IS_FREEBSD)
+        # On FreeBSD, /usr/local/include/iconv.h from ports can shadow the base
+        # system header and remap iconv_* calls to libiconv_* symbols.
+        # LIBICONV_PLUG keeps the header compatible with libc's iconv.
+        target_compile_definitions(m88_raylib PRIVATE LIBICONV_PLUG)
+    endif()
+
+    # --- Embedded Font (non-macOS Unix) --------------------------------
+    if((UNIX OR M88M_IS_HAIKU) AND NOT APPLE)
+        message(STATUS "Embedding fonts for non-macOS Unix binary...")
+        set(FONT_HEADER_FILE "${CMAKE_CURRENT_BINARY_DIR}/embedded_font.h")
+        file(WRITE "${FONT_HEADER_FILE}" "// Autogenerated font data\n")
+
+        # Function to embed a binary asset into the header
+        function(embed_asset input_file array_name)
+            file(READ "${input_file}" ASSET_DATA HEX)
+            string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1, " ASSET_DATA_FORMATTED "${ASSET_DATA}")
+            file(APPEND "${FONT_HEADER_FILE}"
+                "static const unsigned char ${array_name}_data[] = { ${ASSET_DATA_FORMATTED} };\n"
+                "static const unsigned int ${array_name}_size = sizeof(${array_name}_data);\n"
+            )
+        endfunction()
+
+        embed_asset("${CMAKE_CURRENT_SOURCE_DIR}/assets/NotoSansJP-Regular.ttf" "embedded_font_jp")
+        embed_asset("${CMAKE_CURRENT_SOURCE_DIR}/assets/ChicagoKare-Regular.ttf" "embedded_font_latin")
+        embed_asset("${CMAKE_CURRENT_SOURCE_DIR}/assets/AppIcon.png" "embedded_app_icon_png")
+
+        target_compile_definitions(m88_raylib PRIVATE M88_EMBED_FONT M88_EMBED_APP_ICON)
+        target_include_directories(m88_raylib PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+    endif()
+
+    if(APPLE)
+        target_link_libraries(m88_raylib PRIVATE
+            Iconv::Iconv
+            "-framework Cocoa"
+            "-framework IOKit"
+            "-framework CoreVideo"
+            "-framework CoreAudio"
+            "-framework AudioToolbox"
+            "-framework CoreFoundation"
+        )
+
+        # macOS App Icon compilation (actool)
+        set(ICON_DOC      ${CMAKE_CURRENT_SOURCE_DIR}/assets/AppIcon.icon)
+        set(ICON_OUT_DIR  ${CMAKE_CURRENT_BINARY_DIR}/AppIconCompiled)
+        set(ICON_CAR      ${ICON_OUT_DIR}/Assets.car)
+        set(ICON_ICNS     ${ICON_OUT_DIR}/AppIcon.icns)
+
+        file(GLOB_RECURSE ICON_DOC_SOURCES CONFIGURE_DEPENDS "${ICON_DOC}/*")
+
+        add_custom_command(
+            OUTPUT  ${ICON_CAR} ${ICON_ICNS}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${ICON_OUT_DIR}
+            COMMAND xcrun actool --compile ${ICON_OUT_DIR}
+                                 --platform macosx
+                                 --minimum-deployment-target ${CMAKE_OSX_DEPLOYMENT_TARGET}
+                                 --app-icon AppIcon
+                                 --output-partial-info-plist ${ICON_OUT_DIR}/AppIcon-partial.plist
+                                 --output-format human-readable-text
+                                 ${ICON_DOC}
+            DEPENDS ${ICON_DOC_SOURCES}
+            COMMENT "Compiling AppIcon.icon with actool"
+            VERBATIM
+        )
+
+        set_source_files_properties(${ICON_ICNS} ${ICON_CAR} PROPERTIES
+            MACOSX_PACKAGE_LOCATION Resources
+            GENERATED TRUE
+        )
+        target_sources(m88_raylib PRIVATE ${ICON_ICNS} ${ICON_CAR})
+
+        set_target_properties(m88_raylib PROPERTIES
+            MACOSX_BUNDLE_ICON_FILE "AppIcon.icns"
+        )
+
+    elseif(WIN32)
+        target_link_libraries(m88_raylib PRIVATE
+            winmm
+            gdi32
+            shell32
+            ole32
+            uuid
+            comdlg32
+        )
+    elseif(M88M_IS_HAIKU)
+        target_link_libraries(m88_raylib PRIVATE Iconv::Iconv pthread m be media tracker)
+    elseif(UNIX)
+        target_link_libraries(m88_raylib PRIVATE Iconv::Iconv pthread m)
+        if(NOT M88M_IS_FREEBSD)
+            target_link_libraries(m88_raylib PRIVATE dl rt)
+        endif()
+
+        find_package(X11 REQUIRED)
+        target_link_libraries(m88_raylib PRIVATE ${X11_LIBRARIES})
+
+        # Link X11 extension libraries by the exact paths discovered by CMake.
+        # Bare -lXcursor/-lXinerama/... works on Linux, but can fail on FreeBSD
+        # where these ports live under /usr/local/lib.
+        foreach(M88M_X11_EXT_LIB IN ITEMS
+            "${X11_Xcursor_LIB}"
+            "${X11_Xinerama_LIB}"
+            "${X11_Xrandr_LIB}"
+            "${X11_Xi_LIB}"
+        )
+            if(M88M_X11_EXT_LIB)
+                target_link_libraries(m88_raylib PRIVATE "${M88M_X11_EXT_LIB}")
+            endif()
+        endforeach()
+
+        find_package(OpenGL REQUIRED)
+        target_link_libraries(m88_raylib PRIVATE OpenGL::GL)
+
+        if(M88M_IS_LINUX)
+            # ALSA for audio
+            find_package(ALSA)
+            if(ALSA_FOUND)
+                target_link_libraries(m88_raylib PRIVATE ALSA::ALSA)
+            endif()
+        endif()
+    endif()
+
+    # --- Installation and Packaging ------------------------------------
+    include(GNUInstallDirs)
+
+    if(APPLE)
+        install(TARGETS m88_raylib BUNDLE DESTINATION .)
+    else()
+        install(TARGETS m88_raylib RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+        install(FILES ${M88M_FONT_LICENSE_RESOURCES} DESTINATION ${CMAKE_INSTALL_DOCDIR})
+        if(NOT WIN32)
+            # Unix desktop file and icon
+            install(FILES assets/AppIcon.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps RENAME m88m.png)
+
+            file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/m88m.desktop"
+                "[Desktop Entry]\n"
+                "Name=M88M\n"
+                "Exec=m88m\n"
+                "Icon=m88m\n"
+                "Type=Application\n"
+                "Categories=Game;Emulator;\n"
+                "Comment=PC-8801 Emulator\n"
+            )
+            install(FILES "${CMAKE_CURRENT_BINARY_DIR}/m88m.desktop" DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+        endif()
+    endif()
+
+    set(CPACK_PACKAGE_NAME "m88m")
+    set(CPACK_PACKAGE_VENDOR "bubio")
+    set(CPACK_PACKAGE_VERSION "${M88M_VERSION}")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "PC-8801 emulator (M88 改) — raylib frontend")
+    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+
+    if(M88M_IS_LINUX)
+        set(CPACK_GENERATOR "DEB;RPM")
+        set(CPACK_DEBIAN_PACKAGE_MAINTAINER "bubio")
+        # Basic runtime dependencies for raylib/nfd. Accept both the classic
+        # names and the 64-bit time_t (t64) names so the package installs on
+        # older releases (Debian bookworm / Ubuntu 22.04) as well as newer
+        # ones where these libraries were renamed (Debian trixie /
+        # Ubuntu 24.04+).
+        set(CPACK_DEBIAN_PACKAGE_DEPENDS "libasound2 | libasound2t64, libgtk-3-0 | libgtk-3-0t64, libx11-6")
+        # Name packages as m88m-<version>-<platform>-<arch>.<ext> using each
+        # ecosystem's native architecture token (deb: amd64/arm64/armhf,
+        # rpm: x86_64/aarch64) so per-arch release assets don't collide. The
+        # platform token is "raspios" for the Raspberry Pi OS builds and
+        # "linux" for the generic desktop builds.
+        if(M88M_RASPIOS)
+            set(_m88m_platform "raspios")
+        else()
+            set(_m88m_platform "linux")
+        endif()
+        if(CPACK_DEBIAN_PACKAGE_ARCHITECTURE)
+            set(_m88m_deb_arch "${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}")
+        elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+            set(_m88m_deb_arch "arm64")
+        elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
+            set(_m88m_deb_arch "armhf")
+        else()
+            set(_m88m_deb_arch "amd64")
+        endif()
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+            set(_m88m_rpm_arch "aarch64")
+        else()
+            set(_m88m_rpm_arch "x86_64")
+        endif()
+        set(CPACK_DEBIAN_FILE_NAME "m88m-${M88M_VERSION}-${_m88m_platform}-${_m88m_deb_arch}.deb")
+        set(CPACK_RPM_FILE_NAME "m88m-${M88M_VERSION}-${_m88m_platform}-${_m88m_rpm_arch}.rpm")
+    endif()
+
+    include(CPack)
+else()
+    message(STATUS "src/raylib/ has no .cpp files yet — skipping m88_raylib target.")
+endif()
+endif() # M88M_BUILD_GUI

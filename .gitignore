@@ -1,0 +1,38 @@
+# Build / IDE artifacts
+/build/
+/x64/
+/Debug/
+/Release/
+*.lib
+*.obj
+*.aps
+*.ncb
+*.suo
+*.sdf
+*.opensdf
+*.user
+*.dmp
+*.*~
+/.cache/
+/compile_commands.json
+
+# Firmware, session settings and API credentials must never be committed.
+*.[Rr][Oo][Mm]
+/roms/
+/.m88-headless/
+/.m88-basic-test/
+/.m88-gui/
+*.ini
+*.m88
+*.m88dump
+*.capture.png
+connection.json
+*-connection.json
+*.log
+
+# Explicitly distributed Windows GUI; other generated files stay local.
+*.exe
+/dist/*
+!/dist/windows-x64/
+/dist/windows-x64/*
+!/dist/windows-x64/m88m.exe
