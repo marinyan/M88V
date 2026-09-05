@@ -199,6 +199,7 @@ std::string StatusText(int status) {
     case 401: return "Unauthorized";
     case 404: return "Not Found";
     case 405: return "Method Not Allowed";
+    case 409: return "Conflict";
     case 413: return "Payload Too Large";
     default: return "Internal Server Error";
     }
@@ -256,7 +257,8 @@ std::string StatusJson(const HeadlessMachine& machine) {
         << JsonEscape(machine.SelectedN80Rom()) << "\",\"frames\":"
         << machine.FrameCount() << ",\"framebuffer\":{\"width\":" << machine.Framebuffer().Width()
         << ",\"height\":" << machine.Framebuffer().Height() << "},\"registers\":"
-        << RegistersJson(machine.GetRegisters()) << '}';
+        << RegistersJson(machine.GetRegisters()) << ",\"recording\":" << (machine.Recording()?"true":"false")
+        << ",\"debug\":" << machine.Debugger().StatusJson() << '}';
     return out.str();
 }
 
@@ -296,6 +298,78 @@ Response HandleRequest(HeadlessMachine& machine, const Request& request, const s
     if (request.path == "/health") return JsonResponse(200, "{\"ok\":true}");
     if (request.path.rfind("/v1/", 0) != 0) return ErrorResponse(404, "endpoint not found");
     if (!Authorized(request, token)) return ErrorResponse(401, "missing or invalid API token");
+
+    auto& debug=machine.Debugger();
+    if(machine.Recording() && (request.path=="/v1/reset" || request.path=="/v1/load-bin" || request.path=="/v1/tape/open" || request.path=="/v1/debug/watch"))
+        return ErrorResponse(409,"Stop input recording before changing the program, media or watchpoints");
+    const auto query = [&](const std::string& key,const std::string& fallback="") {
+        auto i=request.query.find(key);return i==request.query.end()?fallback:i->second;
+    };
+    const auto number = [&](const std::string& key,uint32_t fallback,uint32_t limit,uint32_t& value) {
+        auto i=request.query.find(key);value=fallback;return i==request.query.end() || ParseUnsigned(i->second,limit,&value);
+    };
+    if(request.path=="/v1/map") {
+        if(request.method!="GET")return ErrorResponse(405,"method not allowed");
+        return JsonResponse(200,machine.MemoryMapJson());
+    }
+    if(request.path=="/v1/state/save" || request.path=="/v1/state/load" || request.path=="/v1/replay/record/start" || request.path=="/v1/replay/record/stop" || request.path=="/v1/replay/play") {
+        if(request.method!="POST")return ErrorResponse(405,"method not allowed");
+        std::string error;bool ok=false;
+        if(request.path=="/v1/state/save")ok=machine.SaveState(query("path"),error);
+        else if(request.path=="/v1/state/load")ok=machine.LoadState(query("path"),error);
+        else if(request.path=="/v1/replay/record/start")ok=machine.StartRecording(error);
+        else if(request.path=="/v1/replay/record/stop")ok=machine.StopRecording(query("path"),error);
+        else ok=machine.Replay(query("path"),error);
+        if(!ok)return ErrorResponse(400,error);
+        return JsonResponse(200,StatusJson(machine));
+    }
+    if(request.path=="/v1/symbols") {
+        if(request.method=="GET")return JsonResponse(200,debug.SymbolsJson());
+        if(request.method!="POST")return ErrorResponse(405,"method not allowed");
+        std::string error;if(!debug.LoadSymbols(query("path"),error))return ErrorResponse(400,error);
+        return JsonResponse(200,debug.SymbolsJson());
+    }
+    if(request.path=="/v1/profile") {
+        if(request.method!="GET")return ErrorResponse(405,"method not allowed");
+        uint32_t top;if(!number("top",50,1000,top))return ErrorResponse(400,"top must be 0..1000");
+        return JsonResponse(200,debug.ProfileJson(top));
+    }
+    if(request.path=="/v1/debug/config") {
+        if(request.method!="POST")return ErrorResponse(405,"method not allowed");
+        uint32_t history;if(!number("history",0,16384,history))return ErrorResponse(400,"history must be 0..16384");
+        debug.Configure(QueryBool(request.query,"profile",false),history,QueryBool(request.query,"writes",false));
+        return JsonResponse(200,"{\"ok\":true,\"debug\":"+debug.StatusJson()+"}");
+    }
+    if(request.path=="/v1/debug/clear" || request.path=="/v1/debug/resume" || request.path=="/v1/debug/watch/clear") {
+        if(request.method!="POST")return ErrorResponse(405,"method not allowed");
+        if(request.path=="/v1/debug/clear")debug.Clear();
+        else if(request.path=="/v1/debug/resume")debug.Resume();else debug.ClearWatches();
+        return JsonResponse(200,StatusJson(machine));
+    }
+    if(request.path=="/v1/profile/region") {
+        if(request.method!="POST")return ErrorResponse(405,"method not allowed");
+        uint16_t begin,end;
+        if(!debug.Resolve(query("begin"),begin)||!debug.Resolve(query("end"),end))return ErrorResponse(400,"unknown region address or symbol");
+        std::string error;if(!debug.Region(query("name"),begin,end,error))return ErrorResponse(400,error);
+        return JsonResponse(200,debug.ProfileJson(0));
+    }
+    if(request.path=="/v1/debug/watch") {
+        if(request.method!="POST")return ErrorResponse(405,"method not allowed");
+        uint16_t address;uint32_t length;
+        if(!debug.Resolve(query("address"),address)||!number("length",1,65536,length))return ErrorResponse(400,"invalid watch address/length");
+        std::string error;if(!debug.Watch(address,length,query("space","cpu"),error))return ErrorResponse(400,error);
+        return JsonResponse(200,"{\"ok\":true,\"debug\":"+debug.StatusJson()+"}");
+    }
+    if(request.path=="/v1/debug/trace") {
+        if(request.method!="GET")return ErrorResponse(405,"method not allowed");
+        uint32_t last;if(!number("last",32,16384,last))return ErrorResponse(400,"last must be 0..16384");
+        return JsonResponse(200,debug.TraceJson(last));
+    }
+    if(request.path=="/v1/debug/writer") {
+        if(request.method!="GET")return ErrorResponse(405,"method not allowed");
+        uint16_t address;if(!debug.Resolve(query("address"),address))return ErrorResponse(400,"unknown address or symbol");
+        return JsonResponse(200,debug.WriterJson(address,query("space","cpu")));
+    }
 
     if (request.path == "/v1/status" && request.method == "GET") {
         return JsonResponse(200, StatusJson(machine));
@@ -356,7 +430,7 @@ Response HandleRequest(HeadlessMachine& machine, const Request& request, const s
         return JsonResponse(200, "{\"ok\":true,\"row\":" + std::to_string(row) + ",\"bit\":" + std::to_string(bit) + ",\"down\":" + (down ? "true" : "false") + '}');
     }
     if (request.path == "/v1/keys/release" && request.method == "POST") {
-        machine.ReleaseAllKeys();
+        if(!machine.ReleaseAllKeys()) return ErrorResponse(400,"Recording is full; stop recording before changing input");
         return JsonResponse(200, "{\"ok\":true}");
     }
     if (request.path == "/v1/frame.png" && request.method == "GET") {

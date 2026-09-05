@@ -25,6 +25,8 @@
 *.ini
 *.m88
 *.m88dump
+*.m88vstate
+*.m88replay
 *.capture.png
 connection.json
 *-connection.json

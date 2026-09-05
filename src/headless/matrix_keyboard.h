@@ -18,6 +18,8 @@ public:
     bool SetNamedKey(const std::string& name, bool down);
     void ReleaseAll();
     uint8_t Row(int row) const;
+    const std::array<uint8_t,16>& Rows() const { return matrix_; }
+    void SetRows(const std::array<uint8_t,16>& rows) { matrix_=rows; }
 
     uint IOCALL In(uint port);
 

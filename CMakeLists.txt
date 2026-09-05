@@ -110,7 +110,8 @@ target_compile_definitions(m88core PUBLIC
 target_link_libraries(m88core PUBLIC ZLIB::ZLIB)
 
 # Shared machine selection and ROM handling for both development frontends.
-add_library(m88_development STATIC src/development/rom_overlay.cpp)
+add_library(m88_development STATIC src/development/rom_overlay.cpp
+    src/development/memory_inspector.cpp src/development/debugger.cpp src/development/snapshot.cpp)
 target_link_libraries(m88_development PUBLIC m88core)
 
 # --- deterministic headless frontend -----------------------------------
@@ -118,6 +119,7 @@ if(M88M_BUILD_HEADLESS)
     add_executable(m88_headless
         src/headless/headless_draw.cpp
         src/headless/headless_machine.cpp
+        src/headless/checkpoints.cpp
         src/headless/http_server.cpp
         src/headless/matrix_keyboard.cpp
         src/headless/main.cpp
@@ -139,6 +141,9 @@ if(M88M_BUILD_HEADLESS)
         add_executable(z80_wait_test src/tests/z80_wait_test.cpp)
         target_link_libraries(z80_wait_test PRIVATE m88core)
         add_test(NAME z80_wait_test COMMAND z80_wait_test)
+        add_executable(z80_observer_test src/tests/z80_observer_test.cpp)
+        target_link_libraries(z80_observer_test PRIVATE m88core)
+        add_test(NAME z80_observer_test COMMAND z80_observer_test)
         add_executable(development_profile_test src/tests/development_profile_test.cpp)
         target_link_libraries(development_profile_test PRIVATE m88_development)
         add_test(NAME development_profile_test COMMAND development_profile_test)

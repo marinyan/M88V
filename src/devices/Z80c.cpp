@@ -35,6 +35,8 @@
 #define RegSP			(reg.r.w.sp)
 
 #define	CLK(count)		(clockcount += (count))
+// M88V: optional bus-wait accounting, separate from instruction/idle time.
+#define BUSWAIT(count) do { const int n = (count); CLK(n); if (observer) observedWaits += n; } while (0)
 
 
 #if defined(LOGNAME) && defined(_DEBUG)
@@ -193,7 +195,7 @@ inline uint Z80C::Fetch8()
 	DEBUGCOUNT(0);
 	if (inst < instlim)
 	{
-		CLK(instwait);
+		BUSWAIT(instwait);
 		return *inst++;
 	}
 	else
@@ -206,7 +208,7 @@ inline uint Z80C::Fetch16()
 #ifdef ALLOWBOUNDARYACCESS
 	if (inst+1 < instlim)
 	{
-		CLK(instwait * 2);
+		BUSWAIT(instwait * 2);
 		uint r = *(uint16*)inst;
 		inst += 2;
 		return r;
@@ -224,7 +226,7 @@ uint Z80C::Fetch8B()
 		SetPC(GetPC());
 		if (instlim)
 		{
-			CLK(instwait);
+			BUSWAIT(instwait);
 			return *inst++;
 		}
 	}
@@ -273,6 +275,7 @@ int Z80C::ExecOne()
 {
 	execcount += clockcount;
 	clockcount = 0;
+    ResumePendingInterrupts();
 	SingleStep();
 	GetAF();
 	return clockcount;
@@ -283,6 +286,7 @@ int Z80C::ExecOne()
 //
 int Z80C::Exec(int clocks)
 {
+    ResumePendingInterrupts();
 	SingleStep();
 	TestIntr();
 	currentcpu = this;
@@ -309,6 +313,7 @@ int Z80C::ExecSingle(Z80C* first, Z80C* second, int clocks)
 
 	currentcpu = first;
 	first->startcount = first->delaycount = c;
+    first->ResumePendingInterrupts();
 	first->SingleStep();
 	first->TestIntr();
 
@@ -329,10 +334,12 @@ int Z80C::ExecDual(Z80C* first, Z80C* second, int count)
 {
 	currentcpu = second;
 	second->startcount = second->delaycount = first->GetCount();
+    second->ResumePendingInterrupts();
 	second->SingleStep();
 	second->TestIntr();
 	currentcpu = first;
 	first->startcount = first->delaycount = second->GetCount();
+    first->ResumePendingInterrupts();
 	first->SingleStep();
 	first->TestIntr(); 
 	
@@ -356,10 +363,12 @@ int Z80C::ExecDual2(Z80C* first, Z80C* second, int count)
 {
 	currentcpu = second;
 	second->startcount = second->delaycount = first->GetCount();
+    second->ResumePendingInterrupts();
 	second->SingleStep();
 	second->TestIntr();
 	currentcpu = first;
 	first->startcount = first->delaycount = second->GetCount();
+    first->ResumePendingInterrupts();
 	first->SingleStep();
 	first->TestIntr(); 
 	
@@ -461,6 +470,7 @@ bool Z80C::Sync()
 	// �i��ł����ꍇ Exec0 �𔲂���
 	execcount += clockcount << eshift;
 	clockcount = 0;
+	if(observer)observedKind="sync-retry";
 	return false;
 }
 
@@ -481,7 +491,48 @@ int Z80C::cbase;
 //	
 inline void Z80C::SingleStep()
 {
+	if (observer) ObservedStep();
+	else SingleStep(Fetch8());
+}
+
+void Z80C::ResumePendingInterrupts()
+{
+    // Run at execution entry, not in the uninstrumented per-opcode hot path.
+    if(debugPaused)return;
+    if(pendingDebugNMI){pendingDebugNMI=false;NMI(0,0);}
+    if(pendingDebugIRQ){pendingDebugIRQ=false;TestIntr();}
+}
+
+void Z80C::ObservedStep()
+{
+	EndObserved();
+	if (debugPaused) { Stop(0); return; }
+    if(pendingDebugNMI){pendingDebugNMI=false;NMI(0,0);}
+    if(pendingDebugIRQ){pendingDebugIRQ=false;TestIntr();}
+    if(debugPaused)return;
+	BeginObserved();
 	SingleStep(Fetch8());
+	EndObserved();
+}
+
+void Z80C::BeginObserved(const char* kind)
+{
+    if(!observer)return;
+    observedKind=kind;observing=true;
+    observedStart=static_cast<uint32_t>(GetCount());
+    observedWaits=observedIdle=0;
+    observer->Begin(*this,kind);
+}
+
+void Z80C::EndObserved(const char* kind)
+{
+    if(!observer||!observing)return;
+    observing=false;
+	const uint32_t elapsed = static_cast<uint32_t>(GetCount()) - observedStart;
+	if (observer->End(*this, elapsed, observedWaits, observedIdle, kind?kind:observedKind)) {
+		debugPaused = true;
+		Stop(0);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -492,7 +543,7 @@ inline uint Z80C::Read8(uint addr)
 	addr &= 0xffff;
 	uint pageindex = addr >> pagebits;
 	MemoryPage& page = rdpages[pageindex];
-	CLK(waittable[pageindex]);
+	BUSWAIT(waittable[pageindex]);
 #ifdef PTR_IDBIT
 	if (!(intpointer(page.ptr) & idbit))
 #else
@@ -514,7 +565,8 @@ inline void Z80C::Write8(uint addr, uint data)
 	addr &= 0xffff;
 	uint pageindex = addr >> pagebits;
 	MemoryPage& page = wrpages[pageindex];
-	CLK(waittable[pageindex]);
+	BUSWAIT(waittable[pageindex]);
+	if (observer) observer->Write(*this, static_cast<uint16_t>(addr), static_cast<uint8_t>(data));
 #ifdef PTR_IDBIT
 	if (!(intpointer(page.ptr) & idbit))
 #else
@@ -546,7 +598,7 @@ inline uint Z80C::Read16(uint addr)
 		uint a = addr & pagemask;
 		if (a < pagemask)
 		{
-			CLK(waittable[addr >> pagebits] * 2);
+			BUSWAIT(waittable[addr >> pagebits] * 2);
 			return *(uint16*)((uint8*)page.ptr + a);
 		}
 	}
@@ -569,7 +621,11 @@ inline void Z80C::Write16(uint addr, uint data)
 		uint a = addr & pagemask;
 		if (a < pagemask)
 		{
-			CLK(waittable[addr >> pagebits] * 2);
+			BUSWAIT(waittable[addr >> pagebits] * 2);
+			if (observer) {
+				observer->Write(*this, static_cast<uint16_t>(addr), static_cast<uint8_t>(data));
+				observer->Write(*this, static_cast<uint16_t>(addr+1), static_cast<uint8_t>(data >> 8));
+			}
 			*(uint16*)((uint8*)page.ptr + a) = data;
 			return;
 		}
@@ -642,6 +698,7 @@ inline void Z80C::Outp(uint port, uint data)
 //
 void IOCALL Z80C::Reset(uint, uint)
 {
+    observing=debugPaused=pendingDebugIRQ=pendingDebugNMI=false;
 	memset(&reg, 0, sizeof(reg));
 	
 	reg.iff1 = false;
@@ -679,11 +736,13 @@ void IOCALL Z80C::Reset(uint, uint)
 //
 void IOCALL Z80C::NMI(uint,uint)
 {
+	if(observer){EndObserved();if(debugPaused){pendingDebugNMI=true;return;}BeginObserved("nmi");}
 	reg.iff2 = reg.iff1;
 	reg.iff1 = false;
 	Push(GetPC());
 	CLK(11);
 	SetPC(0x66);
+	EndObserved();
 }
 
 // ---------------------------------------------------------------------------
@@ -691,8 +750,10 @@ void IOCALL Z80C::NMI(uint,uint)
 //
 void Z80C::TestIntr()
 {
+	if (debugPaused) {if(reg.iff1&&intr)pendingDebugIRQ=true;return;}
 	if (reg.iff1 && intr)
 	{
+		if(observer){EndObserved();if(debugPaused){pendingDebugIRQ=true;return;}BeginObserved("irq");}
 		reg.iff1 = false;
 		reg.iff2 = false;
 		
@@ -722,6 +783,7 @@ void Z80C::TestIntr()
 			CLK(19);
 			break;
 		}
+		EndObserved();
 	}
 }
 
@@ -1315,6 +1377,14 @@ void Z80C::SingleStep(uint m)
 		break;
 
 	case 0xfb:	// EI
+		if(observer) {
+            CLK(4);EndObserved();if(debugPaused)break;
+            BeginObserved();w=Fetch8();
+            if((w&0xf7)!=0xf3) {
+                SingleStep(w);reg.iff1=reg.iff2=true;EndObserved();TestIntr();
+            } else {PCDec(1);EndObserved("lookahead");}
+            break;
+        }
 		w = Fetch8();
 		CLK(4); 
 		if ((w & 0xf7) != 0xf3)
@@ -1337,10 +1407,15 @@ void Z80C::SingleStep(uint m)
 		if (intr)
 		{
 			TestIntr();
+			if(debugPaused)break;
+			if(observer&&!observing)BeginObserved("halt-idle");
 			CLK(64);
+			if(observer)observedIdle+=64;
 		}
-		else
+		else {
+			if (observer && clockcount < 0) observedIdle += static_cast<uint32_t>(-clockcount);
 			clockcount = 0;
+		}
 		break;
 
 // 8 bit arithmatic
@@ -2259,6 +2334,7 @@ void Z80C::OutTestIntr()
 {
 	if (reg.iff1 && intr)
 	{
+		if(observer){EndObserved();if(debugPaused)return;BeginObserved();}
 		uint w = Fetch8();
 		if (w == 0xed)
 		{
@@ -2266,6 +2342,7 @@ void Z80C::OutTestIntr()
 			if (((w & 0xc7) == 0x41) || ((w & 0xe7) == 0xa3))
 			{
 				PCDec(2);
+				EndObserved("lookahead");
 				return;
 			}
 			else
@@ -2277,10 +2354,12 @@ void Z80C::OutTestIntr()
 		else if (w == 0xd3)
 		{
 			PCDec(1);
+			EndObserved("lookahead");
 			return;
 		}
 		else
 			SingleStep(w);
+		EndObserved();
 		TestIntr();
 	}
 }

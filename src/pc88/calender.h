@@ -2,19 +2,21 @@
 //	M88 - PC-8801 Emulator.
 //	Copyright (C) cisc 1998, 1999.
 // ---------------------------------------------------------------------------
-//  ƒJƒŒƒ“ƒ_Œv(ƒÊPD1990) ‚ÌƒGƒ~ƒ…ƒŒ[ƒVƒ‡ƒ“
+//  ã‚«ãƒ¬ãƒ³ãƒ€æ™‚è¨ˆ(Î¼PD1990) ã®ã‚¨ãƒŸãƒ¥ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³
 // ---------------------------------------------------------------------------
 //	$Id: calender.h,v 1.3 1999/10/10 01:47:04 cisc Exp $
 
 #pragma once
 
 #include "device.h"
+#include "schedule.h"
 
 namespace PC8801
 {
 
 class Calender : public Device  
 {
+    friend class M88V::Snapshot;
 public:
 	enum
 	{
@@ -25,6 +27,8 @@ public:
 	Calender(const ID& id);
 	~Calender();
 	bool Init() { return true; } 
+    // M88V: headless replay uses emulated ticks, not request wall-clock time.
+    void UseEmulatedClock(Scheduler* scheduler, time_t epoch);
 
 	const Descriptor* IFCALL GetDesc() const { return &descriptor; }
 
@@ -61,6 +65,11 @@ private:
 	void GetTime();
 
 	time_t diff;
+    time_t Now();
+    Scheduler* developmentClock = nullptr;
+    time_t developmentEpoch = 0;
+    uint32 developmentLast = 0;
+    uint64_t developmentTicks = 0;
 
 	bool dataoutmode;
 	bool hold;

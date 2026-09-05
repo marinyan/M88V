@@ -6,6 +6,7 @@
 class IOBus;
 
 class KeyInput : public Device {
+    friend class CoreRunner;
 public:
     KeyInput();
     virtual ~KeyInput();

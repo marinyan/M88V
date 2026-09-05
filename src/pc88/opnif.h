@@ -7,6 +7,7 @@
 #pragma once
 
 #include "device.h"
+namespace M88V { class Snapshot; }
 #include "opna.h"
 
 // ---------------------------------------------------------------------------
@@ -26,6 +27,7 @@ class Config;
 //
 class OPNIF : public Device, public ISoundSource
 {
+    friend class M88V::Snapshot;
 public:
 	enum IDFunc
 	{
@@ -101,6 +103,7 @@ private:
 		bool intrpending;
 
 		friend class OPNIF;
+        friend class M88V::Snapshot;
 	};
 
 	enum

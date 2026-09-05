@@ -56,6 +56,7 @@ private:
     std::atomic<bool> running;
     std::atomic<bool> paused;
     std::string romError;
+    uint32_t romIdentity = 0;
 
     // Config deferred application
     std::mutex configMutex;

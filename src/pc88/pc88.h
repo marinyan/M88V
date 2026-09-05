@@ -68,6 +68,7 @@ namespace PC8801
 //
 class PC88 : public Scheduler, public ICPUTime
 {
+    friend class M88V::Snapshot;
 public:
 #if defined(CPU_DEBUG)
 	typedef Z80Debug Z80;
@@ -115,6 +116,13 @@ public:
 	bool LoadShapshot(const char* filename);
 
 	int  GetFramePeriod();
+	bool ExecutionPaused() const override {
+#if defined(M88_PORTABLE)
+		return cpu1.IsDebugPaused() || cpu2.IsDebugPaused();
+#else
+		return false;
+#endif
+	}
 
 public:
 	enum SpecialPort
@@ -187,6 +195,7 @@ private:
 	
 public:
 	PC8801::Mouse* mouse;
+    PC8801::Calender* GetCalender() { return caln; }
 	
 protected:
 	Draw* draw;

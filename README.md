@@ -13,6 +13,11 @@ Defender80の開発で追加した機能を、ゲームに依存しない専用�
 - キー入力、Z80レジスタ・物理RAM/TVRAM/GVRAMの参照。
 - PNG画面取得、同一時点のメモリダンプ、T88テープのオープン。
 - GUIとheadlessで共通の機種定義・ROM検査・一時的なROMファイル名の別名対応。
+- シンボル付きT-state計測、書き込み元追跡、ウォッチ停止、命令/レジスタ履歴。
+- 状態保存・復元と入力記録・再生、CPUの読み書き別メモリマップ。
+
+追加4機能の使用例・API・制限は[開発ツール](docs/DEVELOPMENT_TOOLS-ja.md)を参照してください。
+ゲーム固有のシナリオ・結果判定は各プロジェクトに置き、状態/入力の再現を共通化します。
 
 通常GUIのディスク管理・音声・設定などはM88Mから引き継いでいます。
 HTTP APIは`127.0.0.1`だけで待ち受け、起動ごとのトークン認証を必要とします。
@@ -87,11 +92,13 @@ BIN直接ロードは物理主RAMへの書き込みで、バンク切替は行�
 ## 検証
 
 ```powershell
-# ROM不要のCTest 3件は build_headless.ps1 でも実行
+# ROM不要のCTest 4件は build_headless.ps1 でも実行
 ctest --test-dir build/headless-msvc --output-on-failure
 
 # 手元のROMを使用する6モードの統合テスト
 .\scripts\test_development_modes.ps1 -RomDirectory D:\path\to\roms
+.\scripts\test_debug_tools.ps1 -RomDirectory D:\path\to\roms
+.\scripts\test_checkpoints.ps1 -RomDirectory D:\path\to\roms
 ```
 
 [検証範囲と結果](docs/VALIDATION-ja.md)を参照してください。

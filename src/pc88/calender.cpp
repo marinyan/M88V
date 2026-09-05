@@ -2,10 +2,10 @@
 //	M88 - PC-8801 Emulator.
 //	Copyright (C) cisc 1998, 1999.
 // ---------------------------------------------------------------------------
-//  ƒJƒŒƒ“ƒ_Œv(ƒÊPD4990A) ‚ÌƒGƒ~ƒ…ƒŒ[ƒVƒ‡ƒ“
+//  ã‚«ãƒ¬ãƒ³ãƒ€æ™‚è¨ˆ(Î¼PD4990A) ã®ã‚¨ãƒŸãƒ¥ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³
 // ---------------------------------------------------------------------------
 //	$Id: calender.cpp,v 1.4 1999/10/10 01:47:04 cisc Exp $
-//	ETP, 1Hz ‹@”\‚ª–¢À‘•
+//	ãƒ»TP, 1Hz æ©Ÿèƒ½ãŒæœªå®Ÿè£…
 
 #include "headers.h"
 #include "calender.h"
@@ -30,8 +30,26 @@ Calender::~Calender()
 {
 }
 
+void Calender::UseEmulatedClock(Scheduler* scheduler, time_t epoch)
+{
+    developmentClock = scheduler;
+    developmentEpoch = epoch;
+    developmentTicks = 0;
+    developmentLast = scheduler ? static_cast<uint32>(scheduler->GetTime()) : 0;
+    diff = 0;
+}
+
+time_t Calender::Now()
+{
+    if (!developmentClock) return time(nullptr);
+    const uint32 tick = static_cast<uint32>(developmentClock->GetTime());
+    developmentTicks += tick - developmentLast;
+    developmentLast = tick;
+    return developmentEpoch + static_cast<time_t>(developmentTicks / 100000);
+}
+
 // ---------------------------------------------------------------------------
-//	“üEo—Í
+//	å…¥ãƒ»å‡ºåŠ›
 //
 void IOCALL Calender::Reset(uint, uint)
 {
@@ -80,7 +98,7 @@ void IOCALL Calender::Out40(uint, uint data)
 }
 
 // ---------------------------------------------------------------------------
-//	§Œä
+//	åˆ¶å¾¡
 //
 void Calender::Command()
 {
@@ -113,7 +131,7 @@ void Calender::Command()
 		hold = true;
 		dataoutmode = false;
 		break;
-#if 0	// –¢À‘•
+#if 0	// æœªå®Ÿè£…
 	case 0x04:			// timing pulse   64Hz
 	case 0x05:			// timing pulse  256Hz
 	case 0x06:			// timing pulse 2048Hz
@@ -132,7 +150,7 @@ void Calender::Command()
 }
 
 // ---------------------------------------------------------------------------
-//	ƒf[ƒ^ƒVƒtƒg
+//	ãƒ‡ãƒ¼ã‚¿ã‚·ãƒ•ãƒˆ
 //
 void Calender::ShiftData()
 {
@@ -175,14 +193,14 @@ void Calender::ShiftData()
 }
 
 // ---------------------------------------------------------------------------
-//	ŠÔæ“¾
+//	æ™‚é–“å–å¾—
 //
 void Calender::GetTime()
 {
 	time_t ct;
 	tm lt;
 	
-	ct = time(&ct) + diff;
+	ct = Now() + diff;
 	
 	localtime_s(&lt, &ct);
 
@@ -195,14 +213,14 @@ void Calender::GetTime()
 }
 
 // ---------------------------------------------------------------------------
-//	ŠÔİ’è
+//	æ™‚é–“è¨­å®š
 //
 void Calender::SetTime()
 {
 	time_t ct;
 	tm lt;
 
-	time(&ct);
+	ct = Now();
 	localtime_s(&lt, &ct);
 
 	tm nt;
@@ -220,7 +238,7 @@ void Calender::SetTime()
 }
 
 // ---------------------------------------------------------------------------
-//	ó‘Ô•Û‘¶
+//	çŠ¶æ…‹ä¿å­˜
 //
 uint IFCALL Calender::GetStatusSize()
 {
@@ -231,7 +249,7 @@ bool IFCALL Calender::SaveStatus(uint8* s)
 {
 	Status* st = (Status*) s;
 	st->rev = ssrev;
-	st->t = time(&st->t) + diff;
+	st->t = Now() + diff;
 	st->dataoutmode = dataoutmode;
 	st->hold = hold;
 	st->datain = datain;
@@ -249,7 +267,7 @@ bool IFCALL Calender::LoadStatus(const uint8* s)
 	if (st->rev != ssrev)
 		return false;
 	time_t ct;
-	diff = st->t - time(&ct);
+	diff = st->t - Now();
 	dataoutmode = st->dataoutmode;
 	hold = st->hold;
 	datain = st->datain;

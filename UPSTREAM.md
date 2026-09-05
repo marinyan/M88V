@@ -34,6 +34,14 @@ not an official release from either upstream author.
   takes precedence over the default alias without changing the original ROM files.
 - GUI BIN startup no longer forces PC-8001 mode; generic launcher parameters.
 - Configurable BASIC typing cadence, ROM-free unit tests and six-mode integration tests.
+- Optional main-Z80 observers, symbol/region T-state profiling, byte-write provenance,
+  instruction-boundary watch stops and register history, including interrupt events.
+- Actual CPU read/write bank inspection shared across PC-80/88 mappings.
+- Shared validated checkpoint codec, scheduler/fetch-cache restoration, headless
+  emulated-time calendar, keyboard recording/replay, and GUI BIN-session checkpoints.
+  External media rollback and sample-exact audio are not included.
+- Modified legacy headers and memory/calendar/scheduler sources were converted from
+  CP932 to UTF-8 while retaining their original notices and comment text.
 
 ## Licensing
 

@@ -1,6 +1,7 @@
 #include "headless_machine.h"
 
 #include "memory.h"
+#include "pc88/calender.h"
 #include "development/rom_overlay.h"
 
 #include <algorithm>
@@ -59,6 +60,7 @@ bool HeadlessMachine::Initialize(const std::string& romDirectory, const std::str
     if (!roms.Prepare(romDirectory, preferredN80Rom, mode, error)) return false;
     const std::string overlayDirectory = roms.Directory();
     selectedN80Rom_ = roms.SelectedN80Rom();
+    romIdentity_ = roms.Fingerprint();
 
     std::error_code ec;
     const fs::path originalDirectory = fs::current_path(ec);
@@ -97,6 +99,7 @@ bool HeadlessMachine::Initialize(const std::string& romDirectory, const std::str
     config_ = MakeDevelopmentConfig(mode);
     ApplyConfig(&config_);
     Reset();
+    GetCalender()->UseEmulatedClock(this, 946684800); // 2000-01-01 UTC; local calendar representation.
     if (M88V::IsPC80(mode) && !IsN80Supported()) {
         if (error) *error = "n80_2.rom was not accepted by the M88 core";
         return false;
@@ -106,6 +109,7 @@ bool HeadlessMachine::Initialize(const std::string& romDirectory, const std::str
         return false;
     }
     UpdateScreen(true);
+    debugger_.Attach(*GetCPU1(),*GetMem1());
     initialized_ = true;
     return true;
 }
@@ -113,10 +117,13 @@ bool HeadlessMachine::Initialize(const std::string& romDirectory, const std::str
 void HeadlessMachine::ResetMachine() {
     if (!initialized_) return;
     keyboard_.ReleaseAll();
+    debugger_.Clear();
     ApplyConfig(&config_);
     Reset();
     UpdateScreen(true);
     frameCount_ = 0;
+    frameRemaining_ = 0;
+    GetCalender()->UseEmulatedClock(this, 946684800);
 }
 
 bool HeadlessMachine::RunFrames(uint32_t frames, std::string* error) {
@@ -128,13 +135,18 @@ bool HeadlessMachine::RunFrames(uint32_t frames, std::string* error) {
         if (error) *error = "frames must be <= 100000 per request";
         return false;
     }
-    for (uint32_t i = 0; i < frames; ++i) {
-        TimeSync();
-        Proceed(static_cast<uint>(GetFramePeriod()), static_cast<uint>(config_.clock), static_cast<uint>(config_.clock));
+    if (recording_ && (inputEvents_.size()>=50000 || recordedFrames_+frames>100000)) { if(error)*error="Input recording limit reached (50000 events / 100000 frames); stop recording";return false; }
+    for (uint32_t i = 0; i < frames && !debugger_.Stopped(); ++i) {
+        if (!frameRemaining_) {
+            TimeSync();
+            frameRemaining_ = GetFramePeriod();
+        }
+        frameRemaining_ -= Proceed(static_cast<uint>(frameRemaining_), static_cast<uint>(config_.clock), static_cast<uint>(config_.clock));
         diskManager_.Update();
         UpdateScreen(true);
-        ++frameCount_;
+        if (frameRemaining_ <= 0) { frameRemaining_ = 0; ++frameCount_; debugger_.FrameEnd(); }
     }
+    if(recording_ && frames) {inputEvents_.push_back({frames,{}});recordedFrames_+=frames;}
     return true;
 }
 
@@ -162,6 +174,7 @@ bool HeadlessMachine::LoadBinary(const std::string& path, uint16_t address, bool
     }
 
     uint8_t* ram = GetMem1()->GetRAM();
+    debugger_.Clear();
     std::memcpy(ram + address, bytes.data(), bytes.size());
     if (installLauncher) {
         // LD SP,F000 / CALL address / JP 0000. Matches the development-loader handoff notes.
@@ -194,6 +207,7 @@ bool HeadlessMachine::OpenTape(const std::string& path, std::string* error) {
 
 HeadlessMachine::Registers HeadlessMachine::GetRegisters() const {
     auto* cpu = const_cast<HeadlessMachine*>(this)->GetCPU1();
+    cpu->DebugAF(); // Materialize the portable core's lazy condition flags.
     const Z80Reg& reg = cpu->GetReg();
     return Registers{
         static_cast<uint16_t>(cpu->GetPC()),

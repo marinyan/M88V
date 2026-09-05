@@ -7,6 +7,7 @@
 #include "diskmgr.h"
 #include "tapemgr.h"
 #include "development/profile.h"
+#include "development/debugger.h"
 
 #include <cstdint>
 #include <string>
@@ -40,10 +41,19 @@ public:
     bool RunFrames(uint32_t frames, std::string* error);
     bool LoadBinary(const std::string& path, uint16_t address, bool installLauncher, std::string* error);
     bool OpenTape(const std::string& path, std::string* error);
+    M88V::Debugger& Debugger() { return debugger_; }
+    const M88V::Debugger& Debugger() const { return debugger_; }
+    std::string MemoryMapJson() { return M88V::MemoryInspector::Json(*GetMem1(),*GetCPU1()); }
 
-    bool SetKey(int row, int bit, bool down) { return keyboard_.SetKey(row, bit, down); }
-    bool SetNamedKey(const std::string& name, bool down) { return keyboard_.SetNamedKey(name, down); }
-    void ReleaseAllKeys() { keyboard_.ReleaseAll(); }
+    bool SetKey(int row, int bit, bool down);
+    bool SetNamedKey(const std::string& name, bool down);
+    bool ReleaseAllKeys();
+    bool SaveState(const std::string& path,std::string& error);
+    bool LoadState(const std::string& path,std::string& error);
+    bool StartRecording(std::string& error);
+    bool StopRecording(const std::string& path,std::string& error);
+    bool Replay(const std::string& path,std::string& error);
+    bool Recording() const { return recording_; }
 
     Registers GetRegisters() const;
     std::vector<uint8_t> ReadMemory(const std::string& space, uint32_t address, uint32_t length, std::string* error) const;
@@ -64,9 +74,20 @@ private:
     DiskManager diskManager_;
     TapeManager tapeManager_;
     MatrixKeyboard keyboard_;
+    M88V::Debugger debugger_;
     PC8801::Config config_{};
     std::string romDirectory_;
     std::string selectedN80Rom_;
     uint64_t frameCount_ = 0;
+    int frameRemaining_ = 0;
+    uint32_t romIdentity_ = 0;
+    struct InputEvent { uint32_t frames=0; std::array<uint8_t,16> matrix{}; };
+    bool CaptureState(std::vector<uint8_t>& bytes,std::string& error);
+    bool RestoreState(const std::vector<uint8_t>& bytes,std::string& error);
+    void RecordKeys();
+    bool recording_ = false;
+    uint64_t recordedFrames_ = 0;
+    std::vector<InputEvent> inputEvents_;
+    std::vector<uint8_t> recordingState_;
     bool initialized_ = false;
 };

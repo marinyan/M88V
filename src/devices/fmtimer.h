@@ -6,6 +6,7 @@
 
 #ifndef FM_TIMER_H
 #define FM_TIMER_H
+namespace M88V { class Snapshot; }
 
 // ---------------------------------------------------------------------------
 
@@ -13,6 +14,7 @@ namespace FM
 {
 	class Timer
 	{
+        friend class M88V::Snapshot;
 	public:
 		void	Reset();
 		bool	Count(int32 us);
@@ -40,7 +42,7 @@ namespace FM
 	};
 
 // ---------------------------------------------------------------------------
-//	‰Šú‰»
+//	åˆæœŸåŒ–
 //
 inline void Timer::Reset()
 {

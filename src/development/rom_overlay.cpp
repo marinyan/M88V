@@ -6,6 +6,8 @@
 #include <map>
 #include <sstream>
 #include <vector>
+#include <fstream>
+#include "zlib/zlib.h"
 
 namespace fs = std::filesystem;
 namespace M88V {
@@ -82,6 +84,11 @@ bool RomOverlay::Prepare(const std::string& directory, const std::string& prefer
     if (ec || !fs::create_directory(candidate, ec)) { *error = "Cannot create fresh ROM overlay: " + ec.message(); return false; }
     directory_ = candidate;
     for (const auto& item : files) {
+        fingerprint_=crc32(fingerprint_,reinterpret_cast<const Bytef*>(item.first.data()),static_cast<uInt>(item.first.size()));
+        std::ifstream rom(item.second,std::ios::binary);
+        char buffer[16384];
+        while(rom.read(buffer,sizeof(buffer)) || rom.gcount()) fingerprint_=crc32(fingerprint_,reinterpret_cast<const Bytef*>(buffer),static_cast<uInt>(rom.gcount()));
+        if(!rom.eof()) { *error="Cannot fingerprint ROM";return false; }
         const fs::path destination = directory_ / item.first;
         fs::create_symlink(item.second, destination, ec);
         if (ec) {

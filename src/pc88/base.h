@@ -20,6 +20,7 @@ class Config;
 
 class Base : public Device
 {
+    friend class M88V::Snapshot;
 public:
 	enum IDOut
 	{

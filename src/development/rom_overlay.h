@@ -18,8 +18,10 @@ public:
                  BasicMode mode, std::string* error);
     std::string Directory() const { return directory_.u8string(); }
     const std::string& SelectedN80Rom() const { return selectedN80Rom_; }
+    uint32_t Fingerprint() const { return fingerprint_; }
 private:
     std::filesystem::path directory_;
     std::string selectedN80Rom_;
+    uint32_t fingerprint_ = 0;
 };
 } // namespace M88V

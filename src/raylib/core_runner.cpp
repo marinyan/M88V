@@ -14,6 +14,7 @@
 #include "file.h"
 #include "zlib/zlib.h"
 #include "development/rom_overlay.h"
+#include "development/snapshot.h"
 #include <cstdlib>
 #include <filesystem>
 #include <chrono>
@@ -63,6 +64,7 @@ bool CoreRunner::Init(Draw* draw) {
     const char* selected = std::getenv("M88V_N80_ROM");
     romError.clear();
     if (!roms.Prepare(romDir, selected ? selected : "", Config::Get().basicmode, &romError)) return false;
+    romIdentity=roms.Fingerprint();
     if (!diskmgr.Init()) return false;
     std::error_code ec;
     const auto originalDirectory = std::filesystem::current_path(ec);
@@ -194,6 +196,18 @@ bool CoreRunner::LoadBinary(const std::string& path, uint16_t address, std::stri
 
 bool CoreRunner::SaveState(const std::string& path, const std::string& screenshotPath, std::string* message) {
     std::lock_guard<std::mutex> lock(stateMutex);
+    // BIN development sessions use the same validated codec as headless.
+    // Preserve legacy disk/tape slots: external media are not rolled back by checkpoints.
+    if(diskmgr.GetCurrentDisk(0)<0&&diskmgr.GetCurrentDisk(1)<0&&!tapemgr.IsOpen()) {
+        std::vector<uint8_t> frontend(20,0);frontend[0]='G';frontend[1]=1;
+        memcpy(frontend.data()+2,keyInput.matrix,16);
+        frontend[18]=keyInput.capsLockState;frontend[19]=keyInput.kanaLockState;
+        std::vector<uint8_t> bytes;std::string error;
+        bool ok=M88V::Snapshot::Capture(*this,Config::Get(),romIdentity,frontend,bytes,error)&&M88V::Snapshot::WriteFile(path,bytes,error,true);
+        if(ok&&!screenshotPath.empty())if(auto rayDraw=dynamic_cast<RaylibDraw*>(draw))rayDraw->SavePNG(screenshotPath.c_str());
+        if(message)*message=ok?"Development state saved":error;
+        return ok;
+    }
     
     bool ok = false;
     const PC8801::Config& config = Config::Get();
@@ -257,6 +271,20 @@ bool CoreRunner::SaveState(const std::string& path, const std::string& screensho
 
 bool CoreRunner::LoadState(const std::string& path, std::string* message) {
     std::lock_guard<std::mutex> lock(stateMutex);
+    std::vector<uint8_t> bytes;std::string error;
+    if(M88V::Snapshot::ReadFile(path,bytes,error)&&bytes.size()>=9&&!memcmp(bytes.data(),"M88VSTATE",9)) {
+        std::vector<uint8_t> frontend(20);
+        if(bytes.size()<20||bytes[bytes.size()-20]!='G'||bytes[bytes.size()-19]!=1) {
+            if(message)*message="This checkpoint belongs to another frontend";return false;
+        }
+        const bool ok=M88V::Snapshot::Restore(*this,Config::Get(),romIdentity,bytes,frontend,error);
+        if(ok) {
+            memcpy(keyInput.matrix,frontend.data()+2,16);keyInput.capsLockState=frontend[18]!=0;keyInput.kanaLockState=frontend[19]!=0;
+            // Audio output queues/oscillator phase are intentionally not checkpointed.
+            StopAudio();RestartAudio();
+        }
+        if(message)*message=ok?"Development state loaded":error;return ok;
+    }
     
     bool ok = false;
     PC8801::Config cfg = Config::Get();
