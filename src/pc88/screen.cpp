@@ -65,11 +65,15 @@ const uint8 Screen::palextable[2][8] =
 // �\�z/����
 //
 Screen::Screen(const ID& id)
-: Device(id)
+: Device(id), bus(nullptr), memory(nullptr), crtc(nullptr), pal{}, bgpal{},
+  prevgmode(-1), prevpmode(-1), pex(palextable[0]),
+  port30(0), port31(0), port32(0), port33(0), port53(0),
+  fullline(false), fv15k(false), line400(false), line320(false),
+  displayplane(0), displaytext(false), palettechanged(true), modechanged(true),
+  color(false), displaygraphics(false), texttp(false), n80mode(false),
+  textpriority(false), grphpriority(false), gmask(0), newmode(Config::N80)
 {
 	CreateTable();
-	line400 = false;
-	line320 = false;
 }
 
 Screen::~Screen()
@@ -107,6 +111,9 @@ bool Screen::Init(IOBus* _bus, Memory* mem, CRTC* _crtc)
 void IOCALL Screen::Reset(uint,uint)
 {
 	n80mode = (newmode & 2) != 0;
+	// N802 ignores OUT 53H. Clear the latch here as well as at construction,
+	// so neither heap contents nor a previous PC-88/SR mode can hide its text.
+	port53 = 0;
 	palettechanged = true;
 	displaygraphics = false;
 	textpriority = false;

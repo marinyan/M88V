@@ -37,6 +37,7 @@ foreach ($mode in $Modes) {
         & (Join-Path $PSScriptRoot 'type_nbasic.ps1') -ConnectionFile $connectionPath -Line 'PRINT "M88V":POKE &HE010,90' | Out-Null
         $poke=& $client memory -Address E010H -Length 1 -ConnectionFile $connectionPath
         & $client capture -Output (Join-Path $OutputDirectory "$mode-basic.png") -ConnectionFile $connectionPath | Out-Null
+        $litPixels=& (Join-Path $PSScriptRoot 'assert_visible_frame.ps1') -Path (Join-Path $OutputDirectory "$mode-basic.png")
         if ($poke.hex-ne '5A') { throw "$mode BASIC keyboard/POKE test failed ($($poke.hex))" }
 
         & $client reset -ConnectionFile $connectionPath | Out-Null
@@ -94,7 +95,7 @@ foreach ($mode in $Modes) {
         if (-not $tape.ok) { throw "$mode T88 open failed" }
         $reset=& $client reset -ConnectionFile $connectionPath
         if ($reset.mode-ne $mode -or $reset.frames-ne 0) { throw "$mode reset lost its selected profile" }
-        $results += [pscustomobject]@{Mode=$mode;Machine=$expectedMachine;Basic='PASS';Bin='PASS';Keyboard='PASS';Registers='PASS';Gvram='PASS';Dump='PASS';TapeOpen='PASS';Auth='PASS'}
+        $results += [pscustomobject]@{Mode=$mode;Machine=$expectedMachine;Basic='PASS';LitPixels=$litPixels;Bin='PASS';Keyboard='PASS';Registers='PASS';Gvram='PASS';Dump='PASS';TapeOpen='PASS';Auth='PASS'}
         Write-Host "$mode development API: PASS"
     } finally {
         & $client shutdown -ConnectionFile $connectionPath | Out-Null
