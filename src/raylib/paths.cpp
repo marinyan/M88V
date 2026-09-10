@@ -1,4 +1,5 @@
 #include "paths.h"
+#include "development/environment.h"
 #include <cstdlib>
 #include <sys/stat.h>
 #include <vector>
@@ -119,7 +120,7 @@ std::string GetAppDir() {
 }
 
 std::string GetRomDir() {
-    const char* env = std::getenv("M88M_ROM_DIR");
+    const char* env = M88V::EnvironmentValue("M88V_ROM_DIR", "M88M_ROM_DIR");
     if (env) return std::string(env);
 
     std::string path;

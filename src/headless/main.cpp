@@ -1,5 +1,6 @@
 #include "headless_machine.h"
 #include "http_server.h"
+#include "development/environment.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -18,7 +19,8 @@ void PrintUsage() {
         << "             [--basic-mode n802|n80v2|n|n88v1|n88v1h|n88v2]\n"
         << "             [--connection-file .m88-headless/connection.json]\n"
         << "m88-headless --self-test\n\n"
-        << "The HTTP server binds to 127.0.0.1 only. Default mode: n802 (PC-8001mkII).\n";
+        << "The HTTP server binds to 127.0.0.1 only. Default mode: n802 (PC-8001mkII).\n"
+        << "ROM directory: --rom-dir, then M88V_ROM_DIR (legacy: M88M_ROM_DIR).\n";
 }
 
 std::string GenerateToken() {
@@ -113,10 +115,10 @@ int main(int argc, char** argv) {
     }
 
     if (romDirectory.empty()) {
-        if (const char* fromEnvironment = std::getenv("M88M_ROM_DIR")) romDirectory = fromEnvironment;
+        if (const char* fromEnvironment = M88V::EnvironmentValue("M88V_ROM_DIR", "M88M_ROM_DIR")) romDirectory = fromEnvironment;
     }
     if (romDirectory.empty()) {
-        std::cerr << "--rom-dir is required (or set M88M_ROM_DIR)\n";
+        std::cerr << "--rom-dir is required (or set M88V_ROM_DIR)\n";
         return 2;
     }
     if (token.empty()) token = GenerateToken();

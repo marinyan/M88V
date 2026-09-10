@@ -98,7 +98,7 @@ BOOL CALLBACK ConfigPage::PageGate
 		PROPSHEETPAGE* pPage = (PROPSHEETPAGE*)l;
 		config = reinterpret_cast<ConfigPage*>(pPage->lParam);
 		if (config) {
-			::SetWindowLongPtr( hwnd, GWLP_USERDATA, (LONG)config );
+			::SetWindowLongPtr( hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(config) );
 		}
 	} else {
 		config = (ConfigPage*)::GetWindowLongPtr( hwnd, GWLP_USERDATA );

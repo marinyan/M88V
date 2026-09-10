@@ -15,7 +15,7 @@ using namespace PC8801;
 WinConfig* WinConfig::instance = 0;
 
 // ---------------------------------------------------------------------------
-//	�\�z/����
+//	構築/消滅
 //
 WinConfig::WinConfig()
 : pplist(0), npages(0),
@@ -49,7 +49,7 @@ WinConfig::~WinConfig()
 }
 
 // ---------------------------------------------------------------------------
-//	�ݒ�_�C�A���O�̎��s
+//	設定ダイアログの実行
 //
 bool WinConfig::Show(HINSTANCE hinstance, HWND hwnd, Config* conf)
 {
@@ -73,9 +73,9 @@ bool WinConfig::Show(HINSTANCE hinstance, HWND hwnd, Config* conf)
 		cenv.Init(hinst);
 		cromeo.Init(hinst);
 
-		// �g�����W���[���̏ꍇ�Aheader�̃o�[�W�����ɂ���� PROPSHEETPAGE �̃T�C�Y��������肷��
-		PROPSHEETPAGE tmppage[2];	// 2���m�ۂ���̂́A�g������ PROPSHEETPAGE �̃T�C�Y�� 
-									// M88 �� PROPSHEETPAGE ���傫���P�[�X�ɔ����Ă���
+		// 拡張モジュールの場合、headerのバージョンによって PROPSHEETPAGE のサイズが違ったりする
+		PROPSHEETPAGE tmppage[2];	// 2個分確保するのは、拡張側の PROPSHEETPAGE のサイズが
+									// M88 の PROPSHEETPAGE より大きいケースに備えている
 
 		int i=0;
 		for (PropSheets::iterator n = propsheets.begin(); n != propsheets.end() && i < MAXPROPPAGES; ++n)
@@ -102,7 +102,7 @@ bool WinConfig::Show(HINSTANCE hinstance, HWND hwnd, Config* conf)
 			psh.dwFlags = PSH_PROPSHEETPAGE | PSH_MODELESS; 
 			psh.hwndParent = hwndparent;
 			psh.hInstance = hinst;
-			psh.pszCaption = "�ݒ�";
+			psh.pszCaption = "設定";
 			psh.nPages = i;
 			psh.nStartPage = Min(page, i-1);
 			psh.ppsp = psp;

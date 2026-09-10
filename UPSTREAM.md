@@ -6,6 +6,11 @@ not an official release from either upstream author.
 ## Sources
 
 1. [M88 by cisc](http://retropc.net/cisc/m88/): original emulation core.
+   The Windows frontend now uses the native Win32 implementation from
+   [rururutan/m88 at 1c48d83070202eef43ab00db757131d0cc4768cc](https://github.com/rururutan/m88/tree/1c48d83070202eef43ab00db757131d0cc4768cc).
+   Before migration the retained `src/win32` tree already matched this revision
+   except for M88M's `types.h` forwarding header. We restored its build and
+   adapted the interfaces, rather than replacing the fixed development core.
 2. [bubio/M88M](https://github.com/bubio/M88M): portable CMake/raylib frontend.
    The development fork originally imported
    [6fc74b51d678c1942664e37c80c6e04892dd84e2](https://github.com/bubio/M88M/commit/6fc74b51d678c1942664e37c80c6e04892dd84e2)
@@ -26,6 +31,19 @@ not an official release from either upstream author.
   Detailed earlier changes remain in the linked source repository history.
 
 ## M88V changes
+
+- Native Windows GUI as the default: traditional menus, Tape/Open, configuration,
+  keyboard and display backends from rururutan/m88. The same `m88core` and
+  `m88_development` libraries serve Win32, optional raylib, and headless.
+- Native and raylib GUI share the validated BIN launcher; native BIN sessions
+  use the shared checkpoint codec with a frontend-specific keyboard payload.
+- Windows file I/O and locking adapters share the portable layouts; the native
+  status bar polls core status instead of defining a conflicting global class.
+- Native GUI sources needed by the modern compiler were converted from CP932
+  to UTF-8; existing notices and comment text were retained. ANSI UI strings
+  are compiled to CP932, and the resource compiler reads UTF-8 explicitly.
+- Native `m88v.ini` is independent of old `M88.ini` and raylib's `config.bin`.
+  ROM environment aliases remain supported. See [native Windows notes](docs/NATIVE_WINDOWS-ja.md).
 
 - Shared PC-8001/PC-8801 development profiles and temporary ROM alias handling
   in `src/development`, used by GUI and headless frontends.

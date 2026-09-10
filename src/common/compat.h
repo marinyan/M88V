@@ -11,7 +11,7 @@
   #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
   #endif
-  #ifdef M88_PORTABLE
+  #if defined(M88_PORTABLE) && !defined(M88_NATIVE_WIN32)
     // Avoid naming conflicts between windows.h and raylib.h
     #define NOGDI
     #define NOUSER

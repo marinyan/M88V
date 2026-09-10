@@ -1,5 +1,6 @@
 #include <cstdio>
 #include "core_runner.h"
+#include "development/binary_loader.h"
 #include "paths.h"
 #include "config.h"
 #include "opnif.h"
@@ -146,52 +147,7 @@ void CoreRunner::RequestReset() {
 
 bool CoreRunner::LoadBinary(const std::string& path, uint16_t address, std::string* message) {
     std::lock_guard<std::mutex> lock(stateMutex);
-
-    FileIO input;
-    if (!input.Open(path.c_str(), FileIO::readonly)) {
-        if (message) *message = "Cannot open BIN: " + path;
-        return false;
-    }
-    if (!input.Seek(0, FileIO::end)) {
-        if (message) *message = "Cannot determine BIN size: " + path;
-        return false;
-    }
-    const int32 size = input.Tellp();
-    constexpr uint32 launcherAddress = 0xeff0;
-    if (size <= 0) {
-        if (message) *message = "BIN is empty: " + path;
-        return false;
-    }
-    const uint32 end = static_cast<uint32>(address) + static_cast<uint32>(size);
-    if (end > launcherAddress) {
-        if (message) *message = "BIN overlaps the EFF0H launcher";
-        return false;
-    }
-    if (!input.Seek(0, FileIO::begin)) {
-        if (message) *message = "Cannot seek BIN: " + path;
-        return false;
-    }
-
-    std::vector<uint8> bytes(static_cast<size_t>(size));
-    if (input.Read(bytes.data(), size) != size) {
-        if (message) *message = "Cannot read complete BIN: " + path;
-        return false;
-    }
-
-    uint8* ram = GetMem1()->GetRAM();
-    memcpy(ram + address, bytes.data(), bytes.size());
-
-    // LD SP,F000 / CALL address / JP 0000. This is the same handoff used by
-    // the deterministic headless frontend and leaves EFF0H-EFFFH reserved.
-    const uint8 launcher[] = {
-        0x31, 0x00, 0xf0,
-        0xcd, static_cast<uint8>(address & 0xff), static_cast<uint8>(address >> 8),
-        0xc3, 0x00, 0x00,
-    };
-    memcpy(ram + launcherAddress, launcher, sizeof(launcher));
-    GetCPU1()->SetPC(launcherAddress);
-    if (message) *message = "BIN loaded";
-    return true;
+    return M88V::LoadDevelopmentBinary(*this, path, address, message);
 }
 
 bool CoreRunner::SaveState(const std::string& path, const std::string& screenshotPath, std::string* message) {
@@ -496,3 +452,4 @@ void CoreRunner::Run() {
         }
     }
 }
+#include "development/binary_loader.h"

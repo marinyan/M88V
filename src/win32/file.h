@@ -12,6 +12,7 @@
 
 // ---------------------------------------------------------------------------
 
+#if !defined(M88_NATIVE_WIN32)
 class FileIO
 {
 public:
@@ -65,6 +66,11 @@ private:
 	FileIO(const FileIO&);
 	const FileIO& operator=(const FileIO&);
 };
+
+#else
+// Use the identical layout and implementation as m88core.
+#include "../common/file.h"
+#endif
 
 // ---------------------------------------------------------------------------
 

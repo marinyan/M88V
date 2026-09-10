@@ -38,7 +38,7 @@ public:
                     std::lock_guard<std::mutex> lock(gDroppedFilesMutex);
                     gDroppedFiles.emplace_back(path.Path());
                 }
-                std::fprintf(stderr, "M88M: Haiku dropped file: %s\n", path.Path());
+                std::fprintf(stderr, "M88V: Haiku dropped file: %s\n", path.Path());
                 handled = true;
             }
         }
@@ -64,7 +64,7 @@ void HaikuInstallDropHandler() {
     }
 
     gDropHandlerInstalled = (installedCount > 0);
-    std::fprintf(stderr, "M88M: Haiku drop handler installed on %ld window(s)\n", installedCount);
+    std::fprintf(stderr, "M88V: Haiku drop handler installed on %ld window(s)\n", installedCount);
 }
 
 bool HaikuPollDroppedFile(std::string& path) {

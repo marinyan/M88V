@@ -5,6 +5,8 @@
 #include "config.h"
 #include "paths.h"
 #include "development/profile.h"
+#include "development/environment.h"
+#include "development/binary_loader.h"
 #include "haiku_drop.h"
 #include "raylib_mouse.cpp"
 #include <iostream>
@@ -211,21 +213,7 @@ static void TrySetUnixWindowIcon() {
 }
 #endif
 
-static bool ParseLoadAddress(const char* text, uint16_t* address) {
-    if (!text || !*text || !address) return false;
-    std::string value(text);
-    int base = 0;
-    if (value.size() > 1 && (value.back() == 'H' || value.back() == 'h')) {
-        value.pop_back();
-        base = 16;
-    }
-    errno = 0;
-    char* end = nullptr;
-    const unsigned long parsed = std::strtoul(value.c_str(), &end, base);
-    if (errno != 0 || end == value.c_str() || *end != '\0' || parsed > 0xffff) return false;
-    *address = static_cast<uint16_t>(parsed);
-    return true;
-}
+using M88V::ParseLoadAddress;
 
 int main() {
 #ifdef _WIN32
@@ -253,14 +241,14 @@ int main() {
                     L"Failed to initialize the graphics device (OpenGL).\n\n"
                     L"On Windows on ARM, install the \"OpenCL, OpenGL, and Vulkan "
                     L"Compatibility Pack\" from the Microsoft Store, then launch "
-                    L"M88M again.",
-                    L"M88M - Graphics initialization failed",
+                    L"M88V again.",
+                    L"M88V - Graphics initialization failed",
                     0x10 /* MB_ICONERROR */);
             }
         }
 #else
         std::cerr << "Failed to initialize the graphics device (OpenGL).\n"
-                     "M88M requires an OpenGL-capable display." << std::endl;
+                     "M88V requires an OpenGL-capable display." << std::endl;
 #endif
         return 1;
     }
@@ -298,12 +286,12 @@ int main() {
     RaylibDraw draw;
     if (!draw.Init(640, 400, 8)) return 1;
 
-    const char* startupBinEnv = std::getenv("M88M_LOAD_BIN");
+    const char* startupBinEnv = M88V::EnvironmentValue("M88V_LOAD_BIN", "M88M_LOAD_BIN");
     const std::string startupBin = startupBinEnv ? startupBinEnv : "";
     uint16_t startupAddress = 0xc000;
-    const char* startupAddressEnv = std::getenv("M88M_LOAD_ADDRESS");
+    const char* startupAddressEnv = M88V::EnvironmentValue("M88V_LOAD_ADDRESS", "M88M_LOAD_ADDRESS");
     if (startupAddressEnv && !ParseLoadAddress(startupAddressEnv, &startupAddress)) {
-        std::fprintf(stderr, "[Startup] Invalid M88M_LOAD_ADDRESS: %s\n", startupAddressEnv);
+        std::fprintf(stderr, "[Startup] Invalid M88V_LOAD_ADDRESS (legacy M88M_LOAD_ADDRESS): %s\n", startupAddressEnv);
         startupAddress = 0xc000;
     }
     const char* startupMode = std::getenv("M88V_BASIC_MODE");
@@ -432,3 +420,4 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     return main();
 }
 #endif
+#include "development/binary_loader.h"

@@ -3,6 +3,9 @@ param(
     [string]$BuildDirectory = "",
     [ValidateSet("Debug", "RelWithDebInfo", "Release")]
     [string]$Configuration = "RelWithDebInfo",
+    [ValidateSet("win32", "raylib")]
+    [string]$Frontend = "win32",
+    [switch]$NoPublish,
     [string[]]$CMakeArguments = @()
 )
 
@@ -15,7 +18,7 @@ if (-not $env:CMAKE_TLS_CAINFO -and (Test-Path -LiteralPath $cmakeCaBundle -Path
 }
 $useMsvc = Test-Path -LiteralPath $vcvars -PathType Leaf
 if (-not $BuildDirectory) {
-    $BuildDirectory = Join-Path $repository $(if ($useMsvc) { "build\gui-msvc" } else { "build\gui" })
+    $BuildDirectory = Join-Path $repository $(if ($useMsvc) { "build\gui-$Frontend-msvc" } else { "build\gui-$Frontend" })
 }
 
 if ($useMsvc) {
@@ -39,6 +42,7 @@ $configure = @(
     "-S", $repository,
     "-B", $BuildDirectory,
     "-DM88M_BUILD_GUI=ON",
+    "-DM88V_GUI_FRONTEND=$Frontend",
     "-DM88M_BUILD_HEADLESS=OFF",
     "-DBUILD_TESTING=OFF",
     "-DCMAKE_BUILD_TYPE=$Configuration"
@@ -51,19 +55,22 @@ $configure += $CMakeArguments
 & cmake @configure
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-& cmake --build $BuildDirectory --config $Configuration --parallel --target m88_raylib
+$guiTarget = if ($Frontend -eq 'win32') { 'm88_win32' } else { 'm88_raylib' }
+& cmake --build $BuildDirectory --config $Configuration --parallel --target $guiTarget
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-$builtExecutable = Join-Path $BuildDirectory "m88m.exe"
+$executableName = if ($Frontend -eq 'win32') { 'm88v.exe' } else { 'm88v-raylib.exe' }
+$builtExecutable = Join-Path $BuildDirectory $executableName
 if (-not (Test-Path -LiteralPath $builtExecutable -PathType Leaf)) {
-    $builtExecutable = Join-Path $BuildDirectory "$Configuration\m88m.exe"
+    $builtExecutable = Join-Path $BuildDirectory "$Configuration\$executableName"
 }
 if (-not (Test-Path -LiteralPath $builtExecutable -PathType Leaf)) {
-    throw "Built m88m.exe was not found under $BuildDirectory"
+    throw "Built $executableName was not found under $BuildDirectory"
 }
+if ($NoPublish) { Get-Item -LiteralPath $builtExecutable; return }
 
 $distributionDirectory = Join-Path $repository "dist\windows-x64"
 New-Item -ItemType Directory -Force -Path $distributionDirectory | Out-Null
-$distributionExecutable = Join-Path $distributionDirectory "m88m.exe"
+$distributionExecutable = Join-Path $distributionDirectory $executableName
 Copy-Item -LiteralPath $builtExecutable -Destination $distributionExecutable -Force
 Get-Item -LiteralPath $distributionExecutable

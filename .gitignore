@@ -26,6 +26,7 @@
 *.m88
 *.m88dump
 *.m88vstate
+*.s88
 *.m88replay
 *.capture.png
 connection.json
@@ -37,4 +38,4 @@ connection.json
 /dist/*
 !/dist/windows-x64/
 /dist/windows-x64/*
-!/dist/windows-x64/m88m.exe
+!/dist/windows-x64/m88v.exe

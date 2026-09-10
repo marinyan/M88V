@@ -6,16 +6,17 @@
 
 #include "headers.h"
 #include "status.h"
+#include "../common/status.h"
 
 //#define LOGNAME "status"
 #include "diag.h"
 
-StatusDisplay statusdisplay;
+WinStatusDisplay winstatusdisplay;
 
 // ---------------------------------------------------------------------------
 //	Constructor/Destructor
 //
-StatusDisplay::StatusDisplay()
+WinStatusDisplay::WinStatusDisplay()
 {
 	hwnd = 0;
 	hwndparent = 0;
@@ -30,7 +31,7 @@ StatusDisplay::StatusDisplay()
 	currentpriority = 10000;
 }
 	
-StatusDisplay::~StatusDisplay()
+WinStatusDisplay::~WinStatusDisplay()
 {
 	Cleanup();
 	while (list)
@@ -41,13 +42,13 @@ StatusDisplay::~StatusDisplay()
 	}
 }
 
-bool StatusDisplay::Init(HWND hwndp)
+bool WinStatusDisplay::Init(HWND hwndp)
 {
 	hwndparent = hwndp;
 	return true;
 }
 
-bool StatusDisplay::Enable(bool showfd)
+bool WinStatusDisplay::Enable(bool showfd)
 {
 	if (!hwnd)
 	{
@@ -77,7 +78,7 @@ bool StatusDisplay::Enable(bool showfd)
 	return true;
 }
 
-bool StatusDisplay::Disable()
+bool WinStatusDisplay::Disable()
 {
 	if (hwnd)
 	{
@@ -88,7 +89,7 @@ bool StatusDisplay::Disable()
 	return true;
 }
 
-void StatusDisplay::Cleanup()
+void WinStatusDisplay::Cleanup()
 {
 	Disable();
 	if (timerid) {
@@ -100,7 +101,7 @@ void StatusDisplay::Cleanup()
 // ---------------------------------------------------------------------------
 //	DrawItem
 //
-void StatusDisplay::DrawItem(DRAWITEMSTRUCT* dis)
+void WinStatusDisplay::DrawItem(DRAWITEMSTRUCT* dis)
 {
 	switch (dis->itemID)
 	{
@@ -143,9 +144,9 @@ void StatusDisplay::DrawItem(DRAWITEMSTRUCT* dis)
 }
 
 // ---------------------------------------------------------------------------
-//	���b�Z�[�W�ǉ�
+//	メッセージ追加
 //
-bool StatusDisplay::Show(int priority, int duration, char* msg, ...)
+bool WinStatusDisplay::Show(int priority, int duration, char* msg, ...)
 {
 	CriticalSection::Lock lock(cs);
 	
@@ -176,9 +177,9 @@ bool StatusDisplay::Show(int priority, int duration, char* msg, ...)
 }
 
 // ---------------------------------------------------------------------------
-//	�X�V
+//	更新
 //
-void StatusDisplay::Update()
+void WinStatusDisplay::Update()
 {
 	updatemessage = false;
 	if (hwnd)
@@ -232,9 +233,9 @@ void StatusDisplay::Update()
 }
 
 // ---------------------------------------------------------------------------
-//	�K�v�Ȃ��G���g���̍폜
+//	必要ないエントリの削除
 //
-void StatusDisplay::Clean()
+void WinStatusDisplay::Clean()
 {
 	List** prev = &list;
 	int c = GetTickCount();
@@ -254,7 +255,7 @@ void StatusDisplay::Clean()
 // ---------------------------------------------------------------------------
 //
 //
-void StatusDisplay::FDAccess(uint dr, bool hd, bool active)
+void WinStatusDisplay::FDAccess(uint dr, bool hd, bool active)
 {
 	dr &= 1;
 	if (!(litstat[dr] & 4))
@@ -267,8 +268,19 @@ void StatusDisplay::FDAccess(uint dr, bool hd, bool active)
 	}
 }
 
-void StatusDisplay::UpdateDisplay()
+void WinStatusDisplay::UpdateDisplay()
 {
+	for (uint drive = 0; drive < 2; ++drive) {
+		const int state = statusdisplay.GetFDState(drive);
+		FDAccess(drive, state == 2, state != 0);
+	}
+	char message[128];
+	int duration = 0;
+	if (statusdisplay.GetCurrentMessage(message, sizeof(message), &duration)
+		&& strcmp(message, coremessage) != 0) {
+		strcpy_s(coremessage, message);
+		Show(100, duration, "%s", message);
+	}
 	bool update = false;
 	for (int d=0; d<3; d++)
 	{

@@ -3,7 +3,7 @@ param (
     [string]$Architecture = "x64"
 )
 
-# M88M Windows Build Script (PowerShell)
+# M88V Windows Build Script (PowerShell)
 # Requirement: Visual Studio 2022 or later, and CMake
 
 $BuildDir = "build"
@@ -25,27 +25,27 @@ Write-Host "Configuring project..."
 # Let CMake auto-detect the installed Visual Studio generator (VS 2022 / VS 2026 / etc.).
 # GitHub's windows-2025 runner now ships VS 2026, so a hardcoded "Visual Studio 17 2022"
 # generator fails with "could not find any instance of Visual Studio".
-cmake -S . -B $BuildDir -A $Architecture
+cmake -S . -B $BuildDir -A $Architecture -DM88V_GUI_FRONTEND=win32
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Configuration failed."
     exit $LASTEXITCODE
 }
 
 Write-Host "Building project..."
-cmake --build $BuildDir --config $Config --target m88_raylib
+cmake --build $BuildDir --config $Config --target m88_win32
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Build failed."
     exit $LASTEXITCODE
 }
 
 Write-Host "`nBuild successful!"
-Write-Host "Executable is located at: $BuildDir\$Config\m88m.exe`n"
+Write-Host "Executable is located at: $BuildDir\$Config\m88v.exe`n"
 
 if ($Action -eq "run") {
-    Write-Host "Starting m88m.exe..."
+    Write-Host "Starting m88v.exe..."
     Push-Location "$BuildDir\$Config"
     try {
-        .\m88m.exe
+        .\m88v.exe
     } finally {
         Pop-Location
     }

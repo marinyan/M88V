@@ -1,14 +1,21 @@
 cmake_minimum_required(VERSION 3.20)
-project(M88M
+project(M88V
     VERSION 1.2.0
     LANGUAGES CXX C
-    DESCRIPTION "PC-8801 emulator (M88 改) — raylib frontend"
+    DESCRIPTION "PC-8001 / PC-8801 development emulator"
 )
 
 # --- Global settings -----------------------------------------------------
-set(M88M_VERSION "${M88M_VERSION_MAJOR}.${M88M_VERSION_MINOR}.${M88M_VERSION_PATCH}")
-option(M88M_BUILD_GUI "Build the raylib GUI frontend" ON)
+set(M88M_VERSION "${PROJECT_VERSION}")
+option(M88M_BUILD_GUI "Build the selected GUI frontend" ON)
 option(M88M_BUILD_HEADLESS "Build the deterministic headless API frontend" ON)
+if(WIN32)
+    set(M88V_DEFAULT_FRONTEND "win32")
+else()
+    set(M88V_DEFAULT_FRONTEND "raylib")
+endif()
+set(M88V_GUI_FRONTEND "${M88V_DEFAULT_FRONTEND}" CACHE STRING "GUI frontend: win32 or raylib")
+set_property(CACHE M88V_GUI_FRONTEND PROPERTY STRINGS win32 raylib)
 set(MACOSX_BUNDLE_MINIMUM_SYSTEM_VERSION "13.5")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -52,6 +59,22 @@ option(M88M_RASPIOS "Target Raspberry Pi OS (force GLES 2.0, raspios package nam
 # FMGEN's table maths rely on type-punning; -fno-strict-aliasing keeps the
 # emitted code identical to the MSVC original.
 if(MSVC)
+    # Ninja must parse /showIncludes with the same language used by cl.exe.
+    # Pin both sides: a localized prefix decoded incorrectly by CMake silently
+    # drops header dependencies and can link objects with incompatible layouts.
+    get_filename_component(M88V_MSVC_BIN "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    if(EXISTS "${M88V_MSVC_BIN}/1033/clui.dll")
+        set(M88V_MSVC_LANGUAGE 1033)
+        set(CMAKE_CL_SHOWINCLUDES_PREFIX "Note: including file:")
+    elseif(EXISTS "${M88V_MSVC_BIN}/1041/clui.dll")
+        # Japanese-only VS installs cannot honor VSLANG=1033.
+        set(M88V_MSVC_LANGUAGE 1041)
+        set(CMAKE_CL_SHOWINCLUDES_PREFIX "メモ: インクルード ファイル:")
+    endif()
+    if(M88V_MSVC_LANGUAGE)
+        set(CMAKE_C_COMPILER_LAUNCHER "${CMAKE_COMMAND};-E;env;VSLANG=${M88V_MSVC_LANGUAGE}")
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${CMAKE_COMMAND};-E;env;VSLANG=${M88V_MSVC_LANGUAGE}")
+    endif()
     add_compile_options(
         /wd4244 /wd4267 /wd4018 /wd4100 /wd4800 /wd4091 /wd4996
     )
@@ -111,6 +134,7 @@ target_link_libraries(m88core PUBLIC ZLIB::ZLIB)
 
 # Shared machine selection and ROM handling for both development frontends.
 add_library(m88_development STATIC src/development/rom_overlay.cpp
+    src/development/binary_loader.cpp
     src/development/memory_inspector.cpp src/development/debugger.cpp src/development/snapshot.cpp)
 target_link_libraries(m88_development PUBLIC m88core)
 
@@ -150,11 +174,56 @@ if(M88M_BUILD_HEADLESS)
         add_executable(screen_reset_test src/tests/screen_reset_test.cpp)
         target_link_libraries(screen_reset_test PRIVATE m88core)
         add_test(NAME screen_reset_test COMMAND screen_reset_test)
+        add_executable(environment_test src/tests/environment_test.cpp)
+        target_include_directories(environment_test PRIVATE src)
+        add_test(NAME environment_test COMMAND environment_test)
+        add_executable(binary_loader_test src/tests/binary_loader_test.cpp
+            src/headless/headless_draw.cpp src/headless/headless_machine.cpp
+            src/headless/checkpoints.cpp src/headless/matrix_keyboard.cpp)
+        target_link_libraries(binary_loader_test PRIVATE m88_development)
+        add_test(NAME binary_loader_test COMMAND binary_loader_test)
+        if(WIN32)
+            add_executable(native_keyboard_test src/tests/native_keyboard_test.cpp src/win32/WinKeyIF.cpp)
+            target_include_directories(native_keyboard_test BEFORE PRIVATE src/win32)
+            target_compile_definitions(native_keyboard_test PRIVATE M88_NATIVE_WIN32 NOMINMAX)
+            target_link_libraries(native_keyboard_test PRIVATE m88core user32 winmm)
+            if(MSVC)
+                target_compile_options(native_keyboard_test PRIVATE /source-charset:utf-8 /execution-charset:.932)
+            endif()
+            add_test(NAME native_keyboard_test COMMAND native_keyboard_test)
+        endif()
     endif()
 endif()
 
-# --- raylib ------------------------------------------------------------
-if(M88M_BUILD_GUI)
+# --- Native Windows frontend (rururutan/m88) ----------------------------
+if(M88M_BUILD_GUI AND M88V_GUI_FRONTEND STREQUAL "win32")
+    if(NOT WIN32)
+        message(FATAL_ERROR "The win32 frontend requires Windows")
+    endif()
+    enable_language(RC)
+    file(GLOB WIN32_FRONT_SRC src/win32/*.cpp)
+    list(FILTER WIN32_FRONT_SRC EXCLUDE REGEX "(file|instthnk|keybconn|pch)\\.cpp$")
+    add_executable(m88_win32 WIN32 ${WIN32_FRONT_SRC}
+        src/pc88/memview.cpp src/pc88/ioview.cpp src/win32/M88.rc)
+    set_target_properties(m88_win32 PROPERTIES OUTPUT_NAME "m88v")
+    add_executable(m88_writetag writetag.cpp)
+    add_custom_command(TARGET m88_win32 POST_BUILD
+        COMMAND $<TARGET_FILE:m88_writetag> $<TARGET_FILE:m88_win32>
+        COMMENT "Writing native M88V integrity tag")
+    add_dependencies(m88_win32 m88_writetag)
+    target_include_directories(m88_win32 BEFORE PRIVATE src/win32)
+    target_compile_definitions(m88_win32 PRIVATE M88_NATIVE_WIN32 NOMINMAX)
+    if(MSVC)
+        target_compile_options(m88_win32 PRIVATE
+            $<$<COMPILE_LANGUAGE:CXX>:/source-charset:utf-8>
+            $<$<COMPILE_LANGUAGE:CXX>:/execution-charset:.932>)
+    endif()
+    target_link_libraries(m88_win32 PRIVATE m88_development
+        comctl32 winmm gdi32 shell32 ole32 uuid comdlg32 d2d1 dxguid)
+endif()
+
+# --- Optional portable raylib frontend ---------------------------------
+if(M88M_BUILD_GUI AND M88V_GUI_FRONTEND STREQUAL "raylib")
 include(FetchContent)
 
 # Automatically select binary URL based on platform/arch
@@ -308,10 +377,11 @@ if(RAYLIB_FRONT_SRC)
     else()
         if(WIN32)
             add_executable(m88_raylib WIN32 ${RAYLIB_FRONT_SRC})
+            set_target_properties(m88_raylib PROPERTIES OUTPUT_NAME "m88v-raylib")
         else()
             add_executable(m88_raylib ${RAYLIB_FRONT_SRC})
+            set_target_properties(m88_raylib PROPERTIES OUTPUT_NAME "m88m")
         endif()
-        set_target_properties(m88_raylib PROPERTIES OUTPUT_NAME "m88m")
 
         if(NOT M88M_IS_HAIKU)
             # Copy assets to the output directory so the executable can find them

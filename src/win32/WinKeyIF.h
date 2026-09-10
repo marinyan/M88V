@@ -10,6 +10,7 @@
 
 #include "device.h"
 #include "CritSect.h"
+#include <vector>
 
 // ---------------------------------------------------------------------------
 namespace PC8801
@@ -40,6 +41,8 @@ public:
 	void Disable(bool);
 	void KeyDown(uint, uint32);
 	void KeyUp(uint, uint32);
+	std::vector<uint8_t> CaptureDevelopmentState() const;
+	void RestoreDevelopmentState(const std::vector<uint8_t>& state);
 
 	const Descriptor* IFCALL GetDesc() const { return &descriptor; }
 

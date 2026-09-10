@@ -9,11 +9,11 @@
 #include "types.h"
 #include "critsect.h"
 
-class StatusDisplay
+class WinStatusDisplay
 {
 public:
-	StatusDisplay();
-	~StatusDisplay();
+	WinStatusDisplay();
+	~WinStatusDisplay();
 
 	bool Init(HWND hwndparent);
 	void Cleanup();
@@ -66,7 +66,8 @@ private:
 	int currentpriority;
 
 	char buf[128];
+	char coremessage[128] = {};
 };
 
-extern StatusDisplay statusdisplay;
+extern WinStatusDisplay winstatusdisplay;
 

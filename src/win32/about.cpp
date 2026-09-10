@@ -13,7 +13,7 @@
 #include "filetest.h"
 
 // ---------------------------------------------------------------------------
-//	\’z/Á–Å
+//	æ§‹ç¯‰/æ¶ˆæ»…
 //
 M88About::M88About()
 {
@@ -21,7 +21,7 @@ M88About::M88About()
 }
 
 // ---------------------------------------------------------------------------
-//	ƒ_ƒCƒAƒƒO•\¦
+//	ãƒ€ã‚¤ã‚¢ãƒ­ã‚°è¡¨ç¤º
 //
 void M88About::Show(HINSTANCE hinst, HWND hwndparent)
 {
@@ -30,7 +30,7 @@ void M88About::Show(HINSTANCE hinst, HWND hwndparent)
 }
 
 // ---------------------------------------------------------------------------
-//	ƒ_ƒCƒAƒƒOˆ—
+//	ãƒ€ã‚¤ã‚¢ãƒ­ã‚°å‡¦ç†
 //
 INT_PTR M88About::DlgProc(HWND hdlg, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -39,8 +39,8 @@ INT_PTR M88About::DlgProc(HWND hdlg, UINT msg, WPARAM wp, LPARAM lp)
 	switch (msg)
 	{
 	case WM_INITDIALOG:
-		wsprintf(buf, "M88 for Win32 (rel " APP_VER_STRING ")\n"
-					  "PC-8801 series emulator.\n"
+		wsprintf(buf, "M88V for Windows\n"
+					  "PC-8001 / PC-8801 series emulator.\n"
 					  "Copyright (C) 1998, 2003 cisc\n");
 	
 		SetDlgItemText(hdlg, IDC_ABOUT_TEXT, buf);
@@ -91,22 +91,24 @@ INT_PTR CALLBACK M88About::DlgProcGate
 }
 
 // ---------------------------------------------------------------------------
-//	about —p‚ÌƒeƒLƒXƒg
+//	about ç”¨ã®ãƒ†ã‚­ã‚¹ãƒˆ
 //
 const char M88About::abouttext[] =
-	"build date:"__DATE__" (%.8x)\r\n"
+	"build date:" __DATE__ " (%.8x)\r\n"
 	"\r\n"
-	"—v–]EƒoƒO•ñ‚È‚Ç‚ÍˆÈ‰º‚Ìƒy[ƒW‚É‚Ç‚¤‚¼\r\n"
+	"è¦æœ›ãƒ»ãƒã‚°å ±å‘Šãªã©ã¯ä»¥ä¸‹ã®ãƒšãƒ¼ã‚¸ã«ã©ã†ã\r\n"
 	"\r\n"
-	"https://github.com/rururutan/m88\r\n"
+	"https://github.com/marinyan/M88V\r\n"
+	"Win32 UI: https://github.com/rururutan/m88\r\n"
+	"Portable core: https://github.com/bubio/M88M\r\n"
 	"\r\n"
-	"ƒIƒŠƒWƒiƒ‹ M88 ‚Ìƒy[ƒW\r\n"
+	"ã‚ªãƒªã‚¸ãƒŠãƒ« M88 ã®ãƒšãƒ¼ã‚¸\r\n"
 	"\r\n"
 	"http://www.retropc.net/cisc/m88/\r\n"
 	"\r\n"
-	"FM ‰¹Œ¹ƒ†ƒjƒbƒg‚Ìì¬‚É‚ ‚½‚Á‚Ä‚ÍC\r\n"
-	"²“¡’B”Vì‚Ì fm.c ‚ğQl‚É‚³‚¹‚Ä‚¢‚½‚¾‚«‚Ü‚µ‚½D\r\n"
+	"FM éŸ³æºãƒ¦ãƒ‹ãƒƒãƒˆã®ä½œæˆã«ã‚ãŸã£ã¦ã¯ï¼Œ\r\n"
+	"ä½è—¤é”ä¹‹æ°ä½œã® fm.c ã‚’å‚è€ƒã«ã•ã›ã¦ã„ãŸã ãã¾ã—ãŸï¼\r\n"
 	"\r\n"
-	"N80/SR ƒ‚[ƒh‚Í arearea ‚ÌƒR[ƒh‚ğŒ³‚ÉÀ‘•‚³‚ê‚Ä‚¢‚Ü‚·D\r\n"
+	"N80/SR ãƒ¢ãƒ¼ãƒ‰ã¯ arearea æ°ã®ã‚³ãƒ¼ãƒ‰ã‚’å…ƒã«å®Ÿè£…ã•ã‚Œã¦ã„ã¾ã™ï¼\r\n"
 	;
 

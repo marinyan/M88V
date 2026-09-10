@@ -1,6 +1,6 @@
 //
-//	Windows Œn includes
-//	‚·‚×‚Ä‚Ì•W€ƒwƒbƒ_[‚ğŠÜ‚Ş
+//	Windows ç³» includes
+//	ã™ã¹ã¦ã®æ¨™æº–ãƒ˜ãƒƒãƒ€ãƒ¼ã‚’å«ã‚€
 //
 //	$Id: headers.h,v 1.13 2003/05/12 22:26:35 cisc Exp $
 //
@@ -9,14 +9,20 @@
 
 #define STRICT
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 
 #define DIRECTSOUND_VERSION	0x500	// for pre-DirectX7 environment
 
-#define FORW2K					// W2K —p‚Ì SDK ‚ğg—p
+#define FORW2K					// W2K ç”¨ã® SDK ã‚’ä½¿ç”¨
 
 #ifdef FORW2K
+	#if defined(M88_NATIVE_WIN32)
+	#define WINVER          0x601
+	#define _WIN32_WINNT    0x601
+	#else
 	#define WINVER			0x500	// for Win2000
 	#define _WIN32_WINNT	0x500
+	#endif
 #endif
 
 #pragma warning(disable: 4786)
@@ -35,6 +41,7 @@
 #include <process.h>
 #include <assert.h>
 #include <time.h>
+#include <crtdbg.h>
 
 #include <map>
 #include <string>
@@ -46,16 +53,10 @@
 
 using namespace std;
 
-// --- STL ŠÖŒW
+// --- STL é–¢ä¿‚
 
-#ifdef _MSC_VER
-	#undef max
-	#define max _MAX
-	#undef min
-	#define min _MIN
-#endif
 
-// --- OPENFILENAME ŠÖŒW
+// --- OPENFILENAME é–¢ä¿‚
 
 #if _WIN32_WINNT < 0x500
 	struct OFNV5 : public OPENFILENAME

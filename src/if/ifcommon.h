@@ -185,7 +185,7 @@ struct IModule
 //	/ WPARAM / LPARAM). They are consumed exclusively by src/win32/ and the
 //	.m88 extension modules, so the portable build elides them.
 //
-#if defined(_WIN32) && !defined(M88_PORTABLE)
+#if defined(_WIN32) && (!defined(M88_PORTABLE) || defined(M88_NATIVE_WIN32))
 
 struct IConfigPropSheet;
 

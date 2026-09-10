@@ -7,18 +7,21 @@
 //
 // Generated from the TEXTINCLUDE 2 resource.
 //
-#include "afxres.h"
+#include <windows.h>
+#ifndef IDC_STATIC
+#define IDC_STATIC -1
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 #undef APSTUDIO_READONLY_SYMBOLS
 
 /////////////////////////////////////////////////////////////////////////////
-// “ú–{Œê resources
+// æ—¥æœ¬èªž resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_JPN)
 #ifdef _WIN32
 LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
-#pragma code_page(932)
+#pragma code_page(65001)
 #endif //_WIN32
 
 #ifdef APSTUDIO_INVOKED
@@ -338,8 +341,8 @@ END
 
 IDD_ABOUT DIALOGEX 20, 20, 184, 88
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "About M88"
-FONT 10, "‚l‚r ‚oƒSƒVƒbƒN", 0, 0, 0x0
+CAPTION "About M88V"
+FONT 10, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯", 0, 0, 0x0
 BEGIN
     DEFPUSHBUTTON   "OK",IDOK,137,2,40,14
     LTEXT           "",IDC_ABOUT_TEXT,25,5,110,25
@@ -350,83 +353,83 @@ END
 IDD_CONFIG_CPU DIALOGEX 0, 0, 210, 140
 STYLE DS_SETFONT | WS_CHILD | WS_DISABLED | WS_CAPTION
 CAPTION "CPU"
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN", 0, 0, 0x1
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯", 0, 0, 0x1
 BEGIN
-    GROUPBOX        "‘¬“x",IDC_STATIC,5,5,185,40
-    LTEXT           "“®ìŽü”g”(&C)",IDC_STATIC,10,17,49,8
+    GROUPBOX        "é€Ÿåº¦",IDC_STATIC,5,5,185,40
+    LTEXT           "å‹•ä½œå‘¨æ³¢æ•°(&C)",IDC_STATIC,10,17,49,8
     EDITTEXT        IDC_CPU_CLOCK,60,15,30,12,ES_RIGHT | ES_NUMBER | WS_GROUP
     CONTROL         "Spin1",IDC_CPU_CLOCK_SPIN,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,80,15,11,10
     LTEXT           "MHz",IDC_STATIC,97,17,15,8
-    LTEXT           "”{—¦(&B)",IDC_CPU_SPEED_TITLE,10,31,26,8
+    LTEXT           "å€çŽ‡(&B)",IDC_CPU_SPEED_TITLE,10,31,26,8
     CONTROL         "Slider1",IDC_CPU_SPEED,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,40,29,50,13
     LTEXT           "0",IDC_CPU_SPEED_TEXT,90,31,20,8,0,WS_EX_RIGHT
-    CONTROL         "‘S—Í‹ì“®(&M)",IDC_CPU_NOWAIT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,120,15,55,10
-    CONTROL         "‘¬“x’²®È—ª(&N)",IDC_CPU_BURST,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,120,30,69,10
-    GROUPBOX        "Žå•› CPU ‘¬“x”ä(&R)",IDC_STATIC,5,50,108,25
+    CONTROL         "å…¨åŠ›é§†å‹•(&M)",IDC_CPU_NOWAIT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,120,15,55,10
+    CONTROL         "é€Ÿåº¦èª¿æ•´çœç•¥(&N)",IDC_CPU_BURST,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,120,30,69,10
+    GROUPBOX        "ä¸»å‰¯ CPU é€Ÿåº¦æ¯”(&R)",IDC_STATIC,5,50,108,25
     CONTROL         "1:1",IDC_CPU_MS11,"Button",BS_AUTORADIOBUTTON | WS_GROUP,10,60,26,10
     CONTROL         "2:1",IDC_CPU_MS21,"Button",BS_AUTORADIOBUTTON,45,60,26,10
-    CONTROL         "Ž©“®",IDC_CPU_MSAUTO,"Button",BS_AUTORADIOBUTTON,80,60,31,10
-    GROUPBOX        "ŒÝŠ·«",IDC_STATIC,5,80,108,45
-    CONTROL         "Sub CPU ‚ðí‚É‹ì“®(&S)",IDC_CPU_NOSUBCPUCONTROL,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,90,95,10
-    CONTROL         "ƒEƒFƒCƒg(&W)",IDC_CPU_ENABLEWAIT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,100,50,10
-    CONTROL         "FDD ƒEƒFƒCƒg(&F)",IDC_CPU_FDDNOWAIT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,110,62,10
-    GROUPBOX        "Šg’£ƒƒ‚ƒŠ(&E)",IDC_STATIC,117,50,73,25
+    CONTROL         "è‡ªå‹•",IDC_CPU_MSAUTO,"Button",BS_AUTORADIOBUTTON,80,60,31,10
+    GROUPBOX        "äº’æ›æ€§",IDC_STATIC,5,80,108,45
+    CONTROL         "Sub CPU ã‚’å¸¸ã«é§†å‹•(&S)",IDC_CPU_NOSUBCPUCONTROL,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,90,95,10
+    CONTROL         "ã‚¦ã‚§ã‚¤ãƒˆ(&W)",IDC_CPU_ENABLEWAIT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,100,50,10
+    CONTROL         "FDD ã‚¦ã‚§ã‚¤ãƒˆ(&F)",IDC_CPU_FDDNOWAIT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,110,62,10
+    GROUPBOX        "æ‹¡å¼µãƒ¡ãƒ¢ãƒª(&E)",IDC_STATIC,117,50,73,25
     EDITTEXT        IDC_ERAM,121,59,30,12,ES_RIGHT | ES_AUTOHSCROLL
     LTEXT           "x 32 KB",IDC_STATIC,155,61,24,8
 END
 
 IDD_CONFIG_SCREEN DIALOGEX 0, 0, 210, 147
 STYLE DS_SETFONT | WS_CHILD | WS_DISABLED | WS_CAPTION
-CAPTION "‰æ–Ê"
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN", 0, 0, 0x0
+CAPTION "ç”»é¢"
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯", 0, 0, 0x0
 BEGIN
-    GROUPBOX        "‰æ–ÊXV•p“x(&R)",IDC_STATIC,5,5,186,25
+    GROUPBOX        "ç”»é¢æ›´æ–°é »åº¦(&R)",IDC_STATIC,5,5,186,25
     CONTROL         "1:1(60Hz)",IDC_SCREEN_REFRESH_1,"Button",BS_AUTORADIOBUTTON | WS_GROUP,10,15,42,10
     CONTROL         "1:2(30Hz)",IDC_SCREEN_REFRESH_2,"Button",BS_AUTORADIOBUTTON,55,15,42,10
     CONTROL         "1:3(20Hz)",IDC_SCREEN_REFRESH_3,"Button",BS_AUTORADIOBUTTON,100,15,41,10
     CONTROL         "1:4(15Hz)",IDC_SCREEN_REFRESH_4,"Button",BS_AUTORADIOBUTTON,145,15,42,10
-    CONTROL         "PCG ‚ðŽg—p(&P)",IDC_SCREEN_ENABLEPCG,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,35,165,10
-    CONTROL         "15KHz ƒ‚ƒjƒ^[ƒ‚[ƒh(&1)",IDC_SCREEN_FV15K,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,45,165,10
-    CONTROL         "ƒfƒBƒWƒ^ƒ‹ƒpƒŒƒbƒgƒ‚[ƒh(&D)",IDC_SCREEN_DIGITALPAL,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,55,165,10
-    CONTROL         "‘S‰æ–ÊŽž 640x480 ‚É‚·‚é(Ø‚è‘Ö‚¦Žž—LŒø)(&V)",IDC_SCREEN_FORCE480,
+    CONTROL         "PCG ã‚’ä½¿ç”¨(&P)",IDC_SCREEN_ENABLEPCG,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,35,165,10
+    CONTROL         "15KHz ãƒ¢ãƒ‹ã‚¿ãƒ¼ãƒ¢ãƒ¼ãƒ‰(&1)",IDC_SCREEN_FV15K,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,45,165,10
+    CONTROL         "ãƒ‡ã‚£ã‚¸ã‚¿ãƒ«ãƒ‘ãƒ¬ãƒƒãƒˆãƒ¢ãƒ¼ãƒ‰(&D)",IDC_SCREEN_DIGITALPAL,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,55,165,10
+    CONTROL         "å…¨ç”»é¢æ™‚ 640x480 ã«ã™ã‚‹(åˆ‡ã‚Šæ›¿ãˆæ™‚æœ‰åŠ¹)(&V)",IDC_SCREEN_FORCE480,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,65,170,10
-    CONTROL         "•`‰æ‚Ì—Dæ“x‚ð‰º‚°‚é(&L)",IDC_SCREEN_LOWPRIORITY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,75,97,10
-    CONTROL         "‹ô”ƒ‰ƒCƒ“‚ð•\Ž¦‚·‚é(&F)",IDC_SCREEN_FULLLINE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,85,93,10
-    CONTROL         "‘S‰æ–Êƒ‚[ƒh‚Å VSync ‚É“¯Šú(&S)",IDC_SCREEN_VSYNC,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,95,122,10
+    CONTROL         "æç”»ã®å„ªå…ˆåº¦ã‚’ä¸‹ã’ã‚‹(&L)",IDC_SCREEN_LOWPRIORITY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,75,97,10
+    CONTROL         "å¶æ•°ãƒ©ã‚¤ãƒ³ã‚’è¡¨ç¤ºã™ã‚‹(&F)",IDC_SCREEN_FULLLINE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,85,93,10
+    CONTROL         "å…¨ç”»é¢ãƒ¢ãƒ¼ãƒ‰ã§ VSync ã«åŒæœŸ(&S)",IDC_SCREEN_VSYNC,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,95,122,10
 END
 
 IDD_CONFIG_FUNCTION DIALOGEX 0, 0, 210, 147
 STYLE DS_SETFONT | WS_CHILD | WS_DISABLED | WS_CAPTION
-CAPTION "‚»‚Ì‘¼"
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN", 0, 0, 0x0
+CAPTION "ãã®ä»–"
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯", 0, 0, 0x0
 BEGIN
-    CONTROL         "I—¹Žž‚ÌƒfƒBƒŒƒNƒgƒŠ‚ð‹L‰¯(&D)",IDC_FUNCTION_SAVEDIR,"Button",BS_AUTOCHECKBOX | WS_GROUP | WS_TABSTOP,10,4,165,10
-    CONTROL         "I—¹Žž‚ÌˆÊ’u‚ð‹L‰¯(&W)",IDC_FUNCTION_SAVEPOS,"Button",BS_AUTOCHECKBOX | WS_GROUP | WS_TABSTOP,10,14,165,10
-    CONTROL         "ƒŠƒZƒbƒg‹y‚ÑI—¹‚ÌÛ‚ÉŠm”F‚ð‚Æ‚é(&E)",IDC_FUNCTION_ASKBEFORERESET,
+    CONTROL         "çµ‚äº†æ™‚ã®ãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªã‚’è¨˜æ†¶(&D)",IDC_FUNCTION_SAVEDIR,"Button",BS_AUTOCHECKBOX | WS_GROUP | WS_TABSTOP,10,4,165,10
+    CONTROL         "çµ‚äº†æ™‚ã®ä½ç½®ã‚’è¨˜æ†¶(&W)",IDC_FUNCTION_SAVEPOS,"Button",BS_AUTOCHECKBOX | WS_GROUP | WS_TABSTOP,10,14,165,10
+    CONTROL         "ãƒªã‚»ãƒƒãƒˆåŠã³çµ‚äº†ã®éš›ã«ç¢ºèªã‚’ã¨ã‚‹(&E)",IDC_FUNCTION_ASKBEFORERESET,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,24,165,10
-    CONTROL         "ƒL[‚É‚æ‚éƒƒjƒ…[‹N“®‚ð—}§(&K)",IDC_FUNCTION_SUPPRESSMENU,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,34,165,10
-    CONTROL         "•ûŒüƒL[‚ðƒeƒ“ƒL[‚É‘Î‰ž(&H)",IDC_FUNCTION_USEARROWFOR10,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,44,165,10
-    CONTROL         "ƒWƒ‡ƒCƒpƒbƒh‚ðŽg‚¤(&J)",IDC_FUNCTION_ENABLEPAD,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,54,165,10
-    CONTROL         "ƒWƒ‡ƒCƒpƒbƒh‚Ìƒ{ƒ^ƒ“‚ð“ü‚ê‘Ö‚¦‚é(&S)",IDC_FUNCTION_SWAPPADBUTTONS,
+    CONTROL         "ã‚­ãƒ¼ã«ã‚ˆã‚‹ãƒ¡ãƒ‹ãƒ¥ãƒ¼èµ·å‹•ã‚’æŠ‘åˆ¶(&K)",IDC_FUNCTION_SUPPRESSMENU,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,34,165,10
+    CONTROL         "æ–¹å‘ã‚­ãƒ¼ã‚’ãƒ†ãƒ³ã‚­ãƒ¼ã«å¯¾å¿œ(&H)",IDC_FUNCTION_USEARROWFOR10,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,44,165,10
+    CONTROL         "ã‚¸ãƒ§ã‚¤ãƒ‘ãƒƒãƒ‰ã‚’ä½¿ã†(&J)",IDC_FUNCTION_ENABLEPAD,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,54,165,10
+    CONTROL         "ã‚¸ãƒ§ã‚¤ãƒ‘ãƒƒãƒ‰ã®ãƒœã‚¿ãƒ³ã‚’å…¥ã‚Œæ›¿ãˆã‚‹(&S)",IDC_FUNCTION_SWAPPADBUTTONS,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,64,165,10
-    CONTROL         "F12 ‚ð Reset ‚Æ‚·‚é(&F)",IDC_FUNCTION_RESETF12,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,74,165,10
-    CONTROL         "ƒVƒŠƒAƒ‹ƒ}ƒEƒX‚ðŽg‚¤(&M)",IDC_FUNCTION_ENABLEMOUSE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,84,165,10
-    CONTROL         "ƒoƒXƒ}ƒEƒX‚ðŽg‚¤(&O)",IDC_FUNCTION_MOUSEJOY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,94,165,10
-    LTEXT           "Š´“x(&P)",IDC_STATIC,40,105,26,8
-    LTEXT           "•q",IDC_STATIC,75,105,10,8
+    CONTROL         "F12 ã‚’ Reset ã¨ã™ã‚‹(&F)",IDC_FUNCTION_RESETF12,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,74,165,10
+    CONTROL         "ã‚·ãƒªã‚¢ãƒ«ãƒžã‚¦ã‚¹ã‚’ä½¿ã†(&M)",IDC_FUNCTION_ENABLEMOUSE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,84,165,10
+    CONTROL         "ãƒã‚¹ãƒžã‚¦ã‚¹ã‚’ä½¿ã†(&O)",IDC_FUNCTION_MOUSEJOY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,94,165,10
+    LTEXT           "æ„Ÿåº¦(&P)",IDC_STATIC,40,105,26,8
+    LTEXT           "æ•",IDC_STATIC,75,105,10,8
     CONTROL         "Slider1",IDC_FUNCTION_MOUSESENSE,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,82,103,65,13
-    LTEXT           "“Ý",IDC_STATIC,150,105,9,8
-    CONTROL         "ƒXƒNƒŠ[ƒ“ƒVƒ‡ƒbƒg‚Ìƒtƒ@ƒCƒ‹–¼‚ðŽ©“®¶¬(&C)",IDC_FUNCTION_SCREENSHOT_NAME,
+    LTEXT           "éˆ",IDC_STATIC,150,105,9,8
+    CONTROL         "ã‚¹ã‚¯ãƒªãƒ¼ãƒ³ã‚·ãƒ§ãƒƒãƒˆã®ãƒ•ã‚¡ã‚¤ãƒ«åã‚’è‡ªå‹•ç”Ÿæˆ(&C)",IDC_FUNCTION_SCREENSHOT_NAME,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,114,165,10
-    CONTROL         "ƒXƒiƒbƒvƒVƒ‡ƒbƒgƒtƒ@ƒCƒ‹‚ðˆ³k‚·‚é(&Z)",IDC_FUNCTION_COMPSNAP,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,124,165,10
+    CONTROL         "ã‚¹ãƒŠãƒƒãƒ—ã‚·ãƒ§ãƒƒãƒˆãƒ•ã‚¡ã‚¤ãƒ«ã‚’åœ§ç¸®ã™ã‚‹(&Z)",IDC_FUNCTION_COMPSNAP,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,124,165,10
 END
 
 IDD_CONFIG_SOUND DIALOGEX 0, 0, 211, 139
 STYLE DS_SETFONT | WS_CHILD | WS_DISABLED | WS_CAPTION
-CAPTION "‰¹"
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN", 0, 0, 0x0
+CAPTION "éŸ³"
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯", 0, 0, 0x0
 BEGIN
-    GROUPBOX        "Ä¶Žü”g”(&M)",IDC_STATIC,5,5,201,25
+    GROUPBOX        "å†ç”Ÿå‘¨æ³¢æ•°(&M)",IDC_STATIC,5,5,201,25
     CONTROL         "22k",IDC_SOUND_22K,"Button",BS_AUTORADIOBUTTON | WS_GROUP,10,15,22,10
     CONTROL         "44k",IDC_SOUND_44K,"Button",BS_AUTORADIOBUTTON,37,15,23,10
     CONTROL         "48k",IDC_SOUND_48K,"Button",BS_AUTORADIOBUTTON,64,15,22,10
@@ -434,73 +437,73 @@ BEGIN
     CONTROL         "88k",IDC_SOUND_88K,"Button",BS_AUTORADIOBUTTON,118,15,22,10
     CONTROL         "96k",IDC_SOUND_96K,"Button",BS_AUTORADIOBUTTON,144,15,22,10
     CONTROL         "Silent",IDC_SOUND_NOSOUND,"Button",BS_AUTORADIOBUTTON,170,15,28,10
-    GROUPBOX        "FM ‰¹Œ¹ (&44h)",IDC_STATIC,5,35,96,45
-    CONTROL         "OPN ‘Š“–(&1)",IDC_SOUND44_OPN,"Button",BS_AUTORADIOBUTTON | WS_GROUP,10,45,58,10
-    CONTROL         "OPNA ‘Š“–(&2)",IDC_SOUND44_OPNA,"Button",BS_AUTORADIOBUTTON,10,55,63,10
-    CONTROL         "‚È‚µ(V2ŽžOPN)",IDC_SOUND44_NONE,"Button",BS_AUTORADIOBUTTON,10,65,61,10
-    GROUPBOX        "FM ‰¹Œ¹ (A&8h)",IDC_STATIC,5,85,96,45
+    GROUPBOX        "FM éŸ³æº (&44h)",IDC_STATIC,5,35,96,45
+    CONTROL         "OPN ç›¸å½“(&1)",IDC_SOUND44_OPN,"Button",BS_AUTORADIOBUTTON | WS_GROUP,10,45,58,10
+    CONTROL         "OPNA ç›¸å½“(&2)",IDC_SOUND44_OPNA,"Button",BS_AUTORADIOBUTTON,10,55,63,10
+    CONTROL         "ãªã—(V2æ™‚OPN)",IDC_SOUND44_NONE,"Button",BS_AUTORADIOBUTTON,10,65,61,10
+    GROUPBOX        "FM éŸ³æº (A&8h)",IDC_STATIC,5,85,96,45
     CONTROL         "OPN (PC-8801-11)",IDC_SOUNDA8_OPN,"Button",BS_AUTORADIOBUTTON | WS_GROUP,10,95,84,10
     CONTROL         "OPNA (PC-8801-23)",IDC_SOUNDA8_OPNA,"Button",BS_AUTORADIOBUTTON,10,105,87,10
-    CONTROL         "‚È‚µ",IDC_SOUNDA8_NONE,"Button",BS_AUTORADIOBUTTON,10,115,29,10
-    GROUPBOX        "ƒTƒEƒ“ƒhƒoƒbƒtƒ@(&B)",IDC_STATIC,105,35,90,30
+    CONTROL         "ãªã—",IDC_SOUNDA8_NONE,"Button",BS_AUTORADIOBUTTON,10,115,29,10
+    GROUPBOX        "ã‚µã‚¦ãƒ³ãƒ‰ãƒãƒƒãƒ•ã‚¡(&B)",IDC_STATIC,105,35,90,30
     EDITTEXT        IDC_SOUND_BUFFER,130,45,40,12,ES_RIGHT | ES_NUMBER
     CONTROL         "Spin1",IDC_SOUND_BUFFERSPIN,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,160,45,10,10
     LTEXT           "ms",IDC_STATIC,175,46,10,8
-    CONTROL         "CMD SIN&G ‚ðŽg‚¤",IDC_SOUND_CMDSING,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,110,70,65,10
-    CONTROL         "‰¹‚Ì‡¬‚ð—Dæ(&S)",IDC_SOUND_MIXALWAYS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,110,80,77,10
-    CONTROL         "‚¸“x‡¬(&P)",IDC_SOUND_PRECISEMIX,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,110,90,63,10
-    CONTROL         "WaveOut API ‚ÅÄ¶(&W)",IDC_SOUND_WAVEOUT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,110,100,93,10
-    CONTROL         "DirectSound&Notify ‚ðŽg‚¤",IDC_SOUND_USENOTIFY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,110,110,89,10
+    CONTROL         "CMD SIN&G ã‚’ä½¿ã†",IDC_SOUND_CMDSING,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,110,70,65,10
+    CONTROL         "éŸ³ã®åˆæˆã‚’å„ªå…ˆ(&S)",IDC_SOUND_MIXALWAYS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,110,80,77,10
+    CONTROL         "é«˜ç²¾åº¦åˆæˆ(&P)",IDC_SOUND_PRECISEMIX,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,110,90,63,10
+    CONTROL         "WaveOut API ã§å†ç”Ÿ(&W)",IDC_SOUND_WAVEOUT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,110,100,93,10
+    CONTROL         "DirectSound&Notify ã‚’ä½¿ã†",IDC_SOUND_USENOTIFY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,110,110,89,10
 END
 
 IDD_CONFIG_SWITCHES DIALOGEX 0, 0, 210, 147
 STYLE DS_SETFONT | WS_CHILD | WS_DISABLED | WS_CAPTION
 CAPTION "DIP-SW"
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN", 0, 0, 0x0
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯", 0, 0, 0x0
 BEGIN
-    LTEXT           "‹N“®Žž‚Ìƒ‚[ƒh(&M)",IDC_STATIC,5,5,75,8
-    CONTROL         "ƒ^[ƒ~ƒiƒ‹",IDC_DIPSW_1H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,5,48,10
+    LTEXT           "èµ·å‹•æ™‚ã®ãƒ¢ãƒ¼ãƒ‰(&M)",IDC_STATIC,5,5,75,8
+    CONTROL         "ã‚¿ãƒ¼ãƒŸãƒŠãƒ«",IDC_DIPSW_1H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,5,48,10
     CONTROL         "BASIC",IDC_DIPSW_1L,"Button",BS_AUTORADIOBUTTON,140,5,38,10
-    LTEXT           "‚Ps“–‚½‚è‚Ì•¶Žš”(&W)",IDC_STATIC,5,15,80,8
-    CONTROL         "80 •¶Žš",IDC_DIPSW_2H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,15,42,10
-    CONTROL         "40 •¶Žš",IDC_DIPSW_2L,"Button",BS_AUTORADIOBUTTON,140,15,42,10
-    LTEXT           "‚P‰æ–Ê“–‚½‚è‚Ìs”(&H)",IDC_STATIC,5,25,81,8
-    CONTROL         "25 s",IDC_DIPSW_3H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,25,34,10
-    CONTROL         "20 s",IDC_DIPSW_3L,"Button",BS_AUTORADIOBUTTON,140,25,34,10
-    LTEXT           "S ƒpƒ‰ƒ[ƒ^(&S)",IDC_STATIC,5,35,77,8
-    CONTROL         "—LŒø",IDC_DIPSW_4H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,35,31,10
-    CONTROL         "–³Œø",IDC_DIPSW_4L,"Button",BS_AUTORADIOBUTTON,140,35,31,10
-    LTEXT           "DELƒR[ƒhŽóMŽž(&L)",IDC_STATIC,5,45,79,8
-    CONTROL         "ˆ—‚·‚é",IDC_DIPSW_5H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,45,45,10
-    CONTROL         "–³Ž‹‚·‚é",IDC_DIPSW_5L,"Button",BS_AUTORADIOBUTTON,140,45,45,10
-    LTEXT           "ƒpƒŠƒeƒBƒ`ƒFƒbƒN(&P)",IDC_STATIC,5,55,79,8
-    CONTROL         "ƒpƒŠƒeƒB‚ ‚è",IDC_DIPSW_6H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,55,53,10
-    CONTROL         "ƒpƒŠƒeƒB–³‚µ",IDC_DIPSW_6L,"Button",BS_AUTORADIOBUTTON,140,55,54,10
-    LTEXT           "ƒpƒŠƒeƒBŽw’è(&Q)",IDC_STATIC,5,65,79,8
-    CONTROL         "‹ô”",IDC_DIPSW_7H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,65,31,10
-    CONTROL         "Šï”",IDC_DIPSW_7L,"Button",BS_AUTORADIOBUTTON,140,65,31,10
-    LTEXT           "ƒf[ƒ^ƒrƒbƒg’·(&D)",IDC_STATIC,5,75,74,8
-    CONTROL         "8 ƒrƒbƒg",IDC_DIPSW_8H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,75,40,10
-    CONTROL         "7 ƒrƒbƒg",IDC_DIPSW_8L,"Button",BS_AUTORADIOBUTTON,140,75,40,10
-    LTEXT           "ƒXƒgƒbƒvƒrƒbƒg’·(&T)",IDC_STATIC,5,85,74,8
-    CONTROL         "2 ƒrƒbƒg",IDC_DIPSW_9H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,85,40,10
-    CONTROL         "1 ƒrƒbƒg",IDC_DIPSW_9L,"Button",BS_AUTORADIOBUTTON,140,85,40,10
-    LTEXT           "X ƒpƒ‰ƒ[ƒ^(&X)",IDC_STATIC,5,95,73,8
-    CONTROL         "—LŒø",IDC_DIPSW_AH,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,95,31,10
-    CONTROL         "–³Œø",IDC_DIPSW_AL,"Button",BS_AUTORADIOBUTTON,140,95,31,10
-    LTEXT           "’ÊM•ûŽ®(&U)",IDC_STATIC,5,105,67,8
-    CONTROL         "”¼“ñd",IDC_DIPSW_BH,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,105,39,10
-    CONTROL         "‘S“ñd",IDC_DIPSW_BL,"Button",BS_AUTORADIOBUTTON,140,105,39,10
-    LTEXT           "FDD ‚æ‚è‹N“®(&B)",IDC_STATIC,5,115,73,8
-    CONTROL         "Ž©“®",IDC_DIPSW_CH,"Button",BS_AUTORADIOBUTTON,85,115,31,10
-    CONTROL         "‹N“®‚µ‚È‚¢",IDC_DIPSW_CL,"Button",BS_AUTORADIOBUTTON,140,115,51,10
+    LTEXT           "ï¼‘è¡Œå½“ãŸã‚Šã®æ–‡å­—æ•°(&W)",IDC_STATIC,5,15,80,8
+    CONTROL         "80 æ–‡å­—",IDC_DIPSW_2H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,15,42,10
+    CONTROL         "40 æ–‡å­—",IDC_DIPSW_2L,"Button",BS_AUTORADIOBUTTON,140,15,42,10
+    LTEXT           "ï¼‘ç”»é¢å½“ãŸã‚Šã®è¡Œæ•°(&H)",IDC_STATIC,5,25,81,8
+    CONTROL         "25 è¡Œ",IDC_DIPSW_3H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,25,34,10
+    CONTROL         "20 è¡Œ",IDC_DIPSW_3L,"Button",BS_AUTORADIOBUTTON,140,25,34,10
+    LTEXT           "S ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿(&S)",IDC_STATIC,5,35,77,8
+    CONTROL         "æœ‰åŠ¹",IDC_DIPSW_4H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,35,31,10
+    CONTROL         "ç„¡åŠ¹",IDC_DIPSW_4L,"Button",BS_AUTORADIOBUTTON,140,35,31,10
+    LTEXT           "DELã‚³ãƒ¼ãƒ‰å—ä¿¡æ™‚(&L)",IDC_STATIC,5,45,79,8
+    CONTROL         "å‡¦ç†ã™ã‚‹",IDC_DIPSW_5H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,45,45,10
+    CONTROL         "ç„¡è¦–ã™ã‚‹",IDC_DIPSW_5L,"Button",BS_AUTORADIOBUTTON,140,45,45,10
+    LTEXT           "ãƒ‘ãƒªãƒ†ã‚£ãƒã‚§ãƒƒã‚¯(&P)",IDC_STATIC,5,55,79,8
+    CONTROL         "ãƒ‘ãƒªãƒ†ã‚£ã‚ã‚Š",IDC_DIPSW_6H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,55,53,10
+    CONTROL         "ãƒ‘ãƒªãƒ†ã‚£ç„¡ã—",IDC_DIPSW_6L,"Button",BS_AUTORADIOBUTTON,140,55,54,10
+    LTEXT           "ãƒ‘ãƒªãƒ†ã‚£æŒ‡å®š(&Q)",IDC_STATIC,5,65,79,8
+    CONTROL         "å¶æ•°",IDC_DIPSW_7H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,65,31,10
+    CONTROL         "å¥‡æ•°",IDC_DIPSW_7L,"Button",BS_AUTORADIOBUTTON,140,65,31,10
+    LTEXT           "ãƒ‡ãƒ¼ã‚¿ãƒ“ãƒƒãƒˆé•·(&D)",IDC_STATIC,5,75,74,8
+    CONTROL         "8 ãƒ“ãƒƒãƒˆ",IDC_DIPSW_8H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,75,40,10
+    CONTROL         "7 ãƒ“ãƒƒãƒˆ",IDC_DIPSW_8L,"Button",BS_AUTORADIOBUTTON,140,75,40,10
+    LTEXT           "ã‚¹ãƒˆãƒƒãƒ—ãƒ“ãƒƒãƒˆé•·(&T)",IDC_STATIC,5,85,74,8
+    CONTROL         "2 ãƒ“ãƒƒãƒˆ",IDC_DIPSW_9H,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,85,40,10
+    CONTROL         "1 ãƒ“ãƒƒãƒˆ",IDC_DIPSW_9L,"Button",BS_AUTORADIOBUTTON,140,85,40,10
+    LTEXT           "X ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿(&X)",IDC_STATIC,5,95,73,8
+    CONTROL         "æœ‰åŠ¹",IDC_DIPSW_AH,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,95,31,10
+    CONTROL         "ç„¡åŠ¹",IDC_DIPSW_AL,"Button",BS_AUTORADIOBUTTON,140,95,31,10
+    LTEXT           "é€šä¿¡æ–¹å¼(&U)",IDC_STATIC,5,105,67,8
+    CONTROL         "åŠäºŒé‡",IDC_DIPSW_BH,"Button",BS_AUTORADIOBUTTON | WS_GROUP,85,105,39,10
+    CONTROL         "å…¨äºŒé‡",IDC_DIPSW_BL,"Button",BS_AUTORADIOBUTTON,140,105,39,10
+    LTEXT           "FDD ã‚ˆã‚Šèµ·å‹•(&B)",IDC_STATIC,5,115,73,8
+    CONTROL         "è‡ªå‹•",IDC_DIPSW_CH,"Button",BS_AUTORADIOBUTTON,85,115,31,10
+    CONTROL         "èµ·å‹•ã—ãªã„",IDC_DIPSW_CL,"Button",BS_AUTORADIOBUTTON,140,115,51,10
     PUSHBUTTON      "Default",IDC_DIPSW_DEFAULT,4,127,40,12
 END
 
 IDD_CONFIG_SOUNDVOL DIALOGEX 0, 0, 211, 147
 STYLE DS_SETFONT | WS_CHILD | WS_DISABLED | WS_CAPTION
-CAPTION "‰¹—Ê"
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN", 0, 0, 0x0
+CAPTION "éŸ³é‡"
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯", 0, 0, 0x0
 BEGIN
     LTEXT           "&FM",IDC_STATIC,7,5,11,8
     CONTROL         "Slider1",IDC_SOUND_VOLFM,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,50,5,115,11
@@ -538,30 +541,30 @@ END
 
 IDD_CONFIG_ENV DIALOGEX 0, 0, 210, 140
 STYLE DS_SETFONT | WS_CHILD | WS_DISABLED | WS_CAPTION
-CAPTION "ŠÂ‹«"
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN", 0, 0, 0x0
+CAPTION "ç’°å¢ƒ"
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯", 0, 0, 0x0
 BEGIN
-    GROUPBOX        "ƒL[ƒ{[ƒh",IDC_STATIC,5,5,110,46,WS_TABSTOP
-    CONTROL         "“ú–{Œê 106 ƒL[ƒ{[ƒh(&J)",IDC_ENV_KEY106,"Button",BS_AUTORADIOBUTTON | WS_GROUP,10,15,100,10
-    CONTROL         "PC-9801 ƒL[ƒ{[ƒh(&9)",IDC_ENV_KEY98,"Button",BS_AUTORADIOBUTTON,10,26,99,10
-    CONTROL         "ƒtƒ@ƒCƒ‹ƒ_ƒCƒAƒƒO‚ÌˆÊ’uƒo[‚ð•\Ž¦‚·‚é(&P)",IDC_ENV_PLACESBAR,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,56,155,10
-    CONTROL         "‰pŒê 101 ƒL[ƒ{[ƒh(&E)",IDC_ENV_KEY101,"Button",BS_AUTORADIOBUTTON,10,37,99,10
+    GROUPBOX        "ã‚­ãƒ¼ãƒœãƒ¼ãƒ‰",IDC_STATIC,5,5,110,46,WS_TABSTOP
+    CONTROL         "æ—¥æœ¬èªž 106 ã‚­ãƒ¼ãƒœãƒ¼ãƒ‰(&J)",IDC_ENV_KEY106,"Button",BS_AUTORADIOBUTTON | WS_GROUP,10,15,100,10
+    CONTROL         "PC-9801 ã‚­ãƒ¼ãƒœãƒ¼ãƒ‰(&9)",IDC_ENV_KEY98,"Button",BS_AUTORADIOBUTTON,10,26,99,10
+    CONTROL         "ãƒ•ã‚¡ã‚¤ãƒ«ãƒ€ã‚¤ã‚¢ãƒ­ã‚°ã®ä½ç½®ãƒãƒ¼ã‚’è¡¨ç¤ºã™ã‚‹(&P)",IDC_ENV_PLACESBAR,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,56,155,10
+    CONTROL         "è‹±èªž 101 ã‚­ãƒ¼ãƒœãƒ¼ãƒ‰(&E)",IDC_ENV_KEY101,"Button",BS_AUTORADIOBUTTON,10,37,99,10
 END
 
 IDD_NEWDISK DIALOG  30, 50, 187, 81
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "V‚µ‚¢ƒfƒBƒXƒN‚Ìì¬"
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN"
+CAPTION "æ–°ã—ã„ãƒ‡ã‚£ã‚¹ã‚¯ã®ä½œæˆ"
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯"
 BEGIN
-    DEFPUSHBUTTON   "ì¬",IDOK,130,7,50,14
-    PUSHBUTTON      "·¬Ý¾Ù",IDCANCEL,130,24,50,14
-    GROUPBOX        "ƒ^ƒCƒgƒ‹(&T) [”¼Šp16•¶Žš‚Ü‚Å]",IDC_STATIC,5,5,115,30
+    DEFPUSHBUTTON   "ä½œæˆ",IDOK,130,7,50,14
+    PUSHBUTTON      "ï½·ï½¬ï¾ï½¾ï¾™",IDCANCEL,130,24,50,14
+    GROUPBOX        "ã‚¿ã‚¤ãƒˆãƒ«(&T) [åŠè§’16æ–‡å­—ã¾ã§]",IDC_STATIC,5,5,115,30
     EDITTEXT        IDC_NEWDISK_TITLE,10,15,105,14,ES_AUTOHSCROLL
-    GROUPBOX        "Ží—Þ",IDC_STATIC,5,35,115,25
+    GROUPBOX        "ç¨®é¡ž",IDC_STATIC,5,35,115,25
     CONTROL         "&2D",IDC_NEWDISK_2D,"Button",BS_AUTORADIOBUTTON | WS_GROUP,10,45,25,10
     CONTROL         "2&DD",IDC_NEWDISK_2DD,"Button",BS_AUTORADIOBUTTON,45,45,30,10
     CONTROL         "2&HD",IDC_NEWDISK_2HD,"Button",BS_AUTORADIOBUTTON,80,45,30,10
-    CONTROL         "Disk BASIC ƒtƒH[ƒ}ƒbƒg(&B)",IDC_NEWDISK_N88FORMAT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,65,102,10
+    CONTROL         "Disk BASIC ãƒ•ã‚©ãƒ¼ãƒžãƒƒãƒˆ(&B)",IDC_NEWDISK_N88FORMAT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,65,102,10
 END
 
 IDD_SOUNDMON DIALOGEX 240, 40, 179, 237
@@ -575,7 +578,7 @@ IDD_MEMORY DIALOGEX 0, 0, 252, 137
 STYLE DS_SETFONT | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_VSCROLL | WS_SYSMENU | WS_THICKFRAME
 CAPTION "Memory"
 MENU IDR_MENU_MEMORY
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN", 0, 0, 0x0
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯", 0, 0, 0x0
 BEGIN
 END
 
@@ -583,14 +586,14 @@ IDD_CODEMON DIALOG  0, 0, 187, 92
 STYLE DS_SETFONT | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_VSCROLL | WS_SYSMENU | WS_THICKFRAME
 CAPTION "Code"
 MENU IDR_MENU_MEMORY
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN"
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯"
 BEGIN
 END
 
 IDD_MEMORY_EDIT DIALOGEX 100, 100, 107, 39
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Set Byte"
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN", 0, 0, 0x0
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯", 0, 0, 0x0
 BEGIN
     EDITTEXT        IDC_MEMORY_EDITBOX,31,9,23,12,ES_RIGHT | ES_AUTOHSCROLL
     LTEXT           "",IDC_MEMORY_EDIT_TEXT,5,10,20,8
@@ -601,14 +604,14 @@ END
 IDD_BASMON DIALOG  0, 0, 186, 94
 STYLE DS_SETFONT | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_VSCROLL | WS_SYSMENU | WS_THICKFRAME
 CAPTION "Basic"
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN"
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯"
 BEGIN
 END
 
 IDD_REGMON DIALOG  0, 0, 114, 58
 STYLE DS_SETFONT | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
 CAPTION "Z80(main/sub)"
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN"
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯"
 BEGIN
 END
 
@@ -616,21 +619,21 @@ IDD_IOVMON DIALOG  0, 0, 187, 92
 STYLE DS_SETFONT | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_VSCROLL | WS_SYSMENU | WS_THICKFRAME
 CAPTION "Outport"
 MENU IDR_MENU_IOV
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN"
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯"
 BEGIN
 END
 
 IDD_CONFIG_ROMEO DIALOGEX 0, 0, 210, 147
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION
 CAPTION "ROMEO"
-FONT 9, "‚l‚r ‚oƒSƒVƒbƒN", 0, 0, 0x0
+FONT 9, "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯", 0, 0, 0x0
 BEGIN
     CONTROL         "Slider1",IDC_ROMEO_LATENCY,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,55,8,95,13
-    LTEXT           "”­‰¹’x‰„(&L)",IDC_STATIC,10,10,36,8
+    LTEXT           "ç™ºéŸ³é…å»¶(&L)",IDC_STATIC,10,10,36,8
     RTEXT           "100 ms",IDC_ROMEO_LATENCY_TEXT,155,10,32,8
 END
 
-#endif    // “ú–{Œê resources
+#endif    // æ—¥æœ¬èªž resources
 /////////////////////////////////////////////////////////////////////////////
 
 

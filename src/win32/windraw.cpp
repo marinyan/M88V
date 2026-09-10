@@ -2,7 +2,7 @@
 //  M88 - PC88 emulator
 //  Copyright (C) cisc 1998, 2000.
 // ---------------------------------------------------------------------------
-//	‰æ–ÊŠÖŒW for Windows
+//	ç”»é¢é–¢ä¿‚ for Windows
 // ---------------------------------------------------------------------------
 //	$Id: windraw.cpp,v 1.34 2003/04/22 13:16:36 cisc Exp $
 
@@ -24,7 +24,7 @@
 //#define DRAW_THREAD
 
 // ---------------------------------------------------------------------------
-// \’z/Á–Å
+// æ§‹ç¯‰/æ¶ˆæ»…
 //
 WinDraw::WinDraw()
 {
@@ -49,7 +49,7 @@ WinDraw::~WinDraw()
 }
 
 // ---------------------------------------------------------------------------
-//	‰Šú‰»
+//	åˆæœŸåŒ–
 //
 bool WinDraw::Init0(HWND hwindow)
 {
@@ -91,7 +91,7 @@ bool WinDraw::Init(uint w, uint h, uint /*bpp*/)
 }
 
 // ---------------------------------------------------------------------------
-//	Œã•Ğ•t
+//	å¾Œç‰‡ä»˜
 //
 bool WinDraw::Cleanup()
 {
@@ -119,7 +119,7 @@ bool WinDraw::Cleanup()
 }
 
 // ---------------------------------------------------------------------------
-//	‰æ–Ê•`‰æ—pƒXƒŒƒbƒh
+//	ç”»é¢æç”»ç”¨ã‚¹ãƒ¬ãƒƒãƒ‰
 //
 uint WinDraw::ThreadMain()
 {
@@ -141,7 +141,7 @@ uint __stdcall WinDraw::ThreadEntry(LPVOID arg)
 }
 
 // ---------------------------------------------------------------------------
-//	ƒXƒŒƒbƒh‚Ì—Dæ‡ˆÊ‚ğ‰º‚°‚é
+//	ã‚¹ãƒ¬ãƒƒãƒ‰ã®å„ªå…ˆé †ä½ã‚’ä¸‹ã’ã‚‹
 //
 void WinDraw::SetPriorityLow(bool low)
 {
@@ -153,7 +153,7 @@ void WinDraw::SetPriorityLow(bool low)
 }
 
 // ---------------------------------------------------------------------------
-//	ƒpƒŒƒbƒg”½‰f
+//	ãƒ‘ãƒ¬ãƒƒãƒˆåæ˜ 
 //
 void WinDraw::QueryNewPalette(bool /*bkgnd*/)
 {
@@ -163,7 +163,7 @@ void WinDraw::QueryNewPalette(bool /*bkgnd*/)
 }
 
 // ---------------------------------------------------------------------------
-//	ƒyƒCƒ“ƒg‚³‚¹‚é
+//	ãƒšã‚¤ãƒ³ãƒˆã•ã›ã‚‹
 //
 void WinDraw::RequestPaint()
 {
@@ -181,7 +181,7 @@ void WinDraw::RequestPaint()
 }
 
 // ---------------------------------------------------------------------------
-//	XV
+//	æ›´æ–°
 //
 void WinDraw::DrawScreen(const Region& region)
 {
@@ -202,7 +202,7 @@ void WinDraw::DrawScreen(const Region& region)
 }
 
 // ---------------------------------------------------------------------------
-//	•`‰æ‚·‚é
+//	æç”»ã™ã‚‹
 //
 void WinDraw::PaintWindow()
 {
@@ -225,7 +225,7 @@ void WinDraw::PaintWindow()
 		{
 			drawcount++;
 			LOG4("\t\t\t(%3d,%3d)-(%3d,%3d)\n", rect.left, rect.top, rect.right-1, rect.bottom-1);
-//			statusdisplay.Show(100, 0, "(%.3d, %.3d)-(%.3d, %.3d)", rect.left, rect.top, rect.right-1, rect.bottom-1);
+//			winstatusdisplay.Show(100, 0, "(%.3d, %.3d)-(%.3d, %.3d)", rect.left, rect.top, rect.right-1, rect.bottom-1);
 		}
 		drawing = false;
 	}
@@ -233,7 +233,7 @@ void WinDraw::PaintWindow()
 }
 
 // ---------------------------------------------------------------------------
-//	ƒpƒŒƒbƒg‚ğƒZƒbƒg
+//	ãƒ‘ãƒ¬ãƒƒãƒˆã‚’ã‚»ãƒƒãƒˆ
 //
 void WinDraw::SetPalette(uint index, uint nents, const Palette* pal)
 {
@@ -259,7 +259,7 @@ bool WinDraw::Lock(uint8** pimage, int* pbpl)
 		csdraw.lock();
 		if (draw && draw->Lock(pimage, pbpl))
 		{
-			// Lock ‚É¸”s‚·‚é‚±‚Æ‚ª‚ ‚éH
+			// Lock ã«å¤±æ•—ã™ã‚‹ã“ã¨ãŒã‚ã‚‹ï¼Ÿ
 			assert (**pimage >= 0);
 			return true;
 		}
@@ -288,11 +288,11 @@ bool WinDraw::Unlock()
 }
 
 // ---------------------------------------------------------------------------
-//	‰æ–ÊƒTƒCƒY‚ğ•Ï‚¦‚é
+//	ç”»é¢ã‚µã‚¤ã‚ºã‚’å¤‰ãˆã‚‹
 //
 void WinDraw::Resize(uint w, uint h)
 {
-//	statusdisplay.Show(50, 2500, "Resize (%d, %d)", width, height);
+//	winstatusdisplay.Show(50, 2500, "Resize (%d, %d)", width, height);
 	width = w;
 	height = h;
 	if (draw) {
@@ -303,7 +303,7 @@ void WinDraw::Resize(uint w, uint h)
 }
 
 // ---------------------------------------------------------------------------
-//	‰æ–ÊˆÊ’u‚ğ•Ï‚¦‚é
+//	ç”»é¢ä½ç½®ã‚’å¤‰ãˆã‚‹
 //
 void WinDraw::WindowMoved(int x, int y)
 {
@@ -312,13 +312,13 @@ void WinDraw::WindowMoved(int x, int y)
 }
 
 // ---------------------------------------------------------------------------
-//	‰æ–Ê•`‰æƒhƒ‰ƒCƒo‚Ì•ÏX
+//	ç”»é¢æç”»ãƒ‰ãƒ©ã‚¤ãƒã®å¤‰æ›´
 //
 bool WinDraw::ChangeDisplayMode(bool fullscreen, bool force480)
 {
 	DisplayType type = fullscreen ? DDFull : D2D;
 
-	// Œ»İ‘‹(M88)‚ªŠ‘®‚·‚éƒ‚ƒjƒ^‚Ì GUID ‚ğæ“¾
+	// ç¾åœ¨çª“(M88)ãŒæ‰€å±ã™ã‚‹ãƒ¢ãƒ‹ã‚¿ã® GUID ã‚’å–å¾—
 	memset(&gmonitor, 0, sizeof(gmonitor));
 
 	hmonitor = (*MonitorFromWin)(hwnd, MONITOR_DEFAULTTOPRIMARY);
@@ -326,7 +326,7 @@ bool WinDraw::ChangeDisplayMode(bool fullscreen, bool force480)
 
 	if (type != drawtype)
 	{
-		// ¡‚Ü‚Å‚Ìƒhƒ‰ƒCƒo‚ğ”pŠü
+		// ä»Šã¾ã§ã®ãƒ‰ãƒ©ã‚¤ãƒã‚’å»ƒæ£„
 		if (draw)
 			draw->SetGUIMode(true);
 		{
@@ -334,7 +334,7 @@ bool WinDraw::ChangeDisplayMode(bool fullscreen, bool force480)
 			delete draw; draw = 0;
 		}
 
-		// V‚µ‚¢ƒhƒ‰ƒCƒo‚Ì—pˆÓ
+		// æ–°ã—ã„ãƒ‰ãƒ©ã‚¤ãƒã®ç”¨æ„
 		WinDrawSub* newdraw;
 		switch (type)
 		{
@@ -356,13 +356,13 @@ bool WinDraw::ChangeDisplayMode(bool fullscreen, bool force480)
 		
 		if (!newdraw || !newdraw->Init(hwnd, width, height, &gmonitor))
 		{
-			// ‰Šú‰»‚É¸”s‚µ‚½ê‡ GDI ƒhƒ‰ƒCƒo‚ÅÄ’§í
+			// åˆæœŸåŒ–ã«å¤±æ•—ã—ãŸå ´åˆ GDI ãƒ‰ãƒ©ã‚¤ãƒã§å†æŒ‘æˆ¦
 			delete newdraw;
 			
 			if (type == DDFull)
-				statusdisplay.Show(50, 2500, "‰æ–ÊØ‚è‘Ö‚¦‚É¸”s‚µ‚Ü‚µ‚½");
+				winstatusdisplay.Show(50, 2500, "ç”»é¢åˆ‡ã‚Šæ›¿ãˆã«å¤±æ•—ã—ã¾ã—ãŸ");
 			else
-				statusdisplay.Show(120, 3000, "GDI ƒhƒ‰ƒCƒo‚ğg—p‚µ‚Ü‚·");
+				winstatusdisplay.Show(120, 3000, "GDI ãƒ‰ãƒ©ã‚¤ãƒã‚’ä½¿ç”¨ã—ã¾ã™");
 
 			newdraw = new WinDrawGDI, type = GDI;
 			result = false;
@@ -377,7 +377,7 @@ bool WinDraw::ChangeDisplayMode(bool fullscreen, bool force480)
 			newdraw->SetGUIMode(false);
 		}
 		
-		// V‚µ‚¢ƒhƒ‰ƒCƒo‚ğg—p‰Â”\‚É‚·‚é
+		// æ–°ã—ã„ãƒ‰ãƒ©ã‚¤ãƒã‚’ä½¿ç”¨å¯èƒ½ã«ã™ã‚‹
 		{
 			CriticalSection::Lock lock(csdraw);
 			guicount = 0;
@@ -402,7 +402,7 @@ bool WinDraw::ChangeDisplayMode(bool fullscreen, bool force480)
 }
 
 // ---------------------------------------------------------------------------
-//	Œ»İ‚Ìó‘Ô‚ğ“¾‚é
+//	ç¾åœ¨ã®çŠ¶æ…‹ã‚’å¾—ã‚‹
 //
 uint WinDraw::GetStatus()
 {
@@ -417,7 +417,7 @@ uint WinDraw::GetStatus()
 }
 
 // ---------------------------------------------------------------------------
-//	flip ƒ‚[ƒh‚Ìİ’è
+//	flip ãƒ¢ãƒ¼ãƒ‰ã®è¨­å®š
 //
 bool WinDraw::SetFlipMode(bool f)
 {
@@ -428,7 +428,7 @@ bool WinDraw::SetFlipMode(bool f)
 }
 
 // ---------------------------------------------------------------------------
-//	flip ‚·‚é
+//	flip ã™ã‚‹
 //
 void WinDraw::Flip()
 {
@@ -437,7 +437,7 @@ void WinDraw::Flip()
 }
 
 // ---------------------------------------------------------------------------
-//	GUI g—pƒtƒ‰ƒOİ’è
+//	GUI ä½¿ç”¨ãƒ•ãƒ©ã‚°è¨­å®š
 //
 void WinDraw::SetGUIFlag(bool usegui)
 {
@@ -461,9 +461,9 @@ void WinDraw::SetGUIFlag(bool usegui)
 }
 
 // ---------------------------------------------------------------------------
-//	‰æ–Ê‚ğ 640x400x4 ‚Ì BMP ‚É•ÏŠ·‚·‚é
-//	dest	•ÏŠ·‚µ‚½ BMP ‚Ì’u‚«êŠA’u‚¯‚é‚¾‚¯‚Ì—Ìˆæ‚ª•K—vB
-//	ret		I‚­‚Å‚«‚½‚©‚Ç‚¤‚©
+//	ç”»é¢ã‚’ 640x400x4 ã® BMP ã«å¤‰æ›ã™ã‚‹
+//	dest	å¤‰æ›ã—ãŸ BMP ã®ç½®ãå ´æ‰€ã€ç½®ã‘ã‚‹ã ã‘ã®é ˜åŸŸãŒå¿…è¦ã€‚
+//	ret		å·§ãã§ããŸã‹ã©ã†ã‹
 //
 int WinDraw::CaptureScreen(uint8* dest)
 {
@@ -487,7 +487,7 @@ int WinDraw::CaptureScreen(uint8* dest)
 		draw->Unlock();
 	}
 
-	// \‘¢‘Ì‚Ì€”õ
+	// æ§‹é€ ä½“ã®æº–å‚™
 
 	BITMAPFILEHEADER* filehdr = (BITMAPFILEHEADER*) dest;
 	BITMAPINFO* binfo = (BITMAPINFO*) (filehdr+1);
@@ -507,7 +507,7 @@ int WinDraw::CaptureScreen(uint8* dest)
 	binfo->bmiHeader.biXPelsPerMeter = 0;
 	binfo->bmiHeader.biYPelsPerMeter = 0;
 
-	// ‚P‚UFƒpƒŒƒbƒg‚Ìì¬
+	// ï¼‘ï¼–è‰²ãƒ‘ãƒ¬ãƒƒãƒˆã®ä½œæˆ
 	RGBQUAD* pal = binfo->bmiColors;
 	memset(pal, 0, sizeof(RGBQUAD)*16);
 	
@@ -543,13 +543,13 @@ match:
 	
 	binfo->bmiHeader.biClrImportant = colors;
 	
-	colors = 16;		// ‚â‚Á‚ÏŒÅ’è‚¶‚á‚È‚«‚á‘Ê–Ú‚©H
+	colors = 16;		// ã‚„ã£ã±å›ºå®šã˜ã‚ƒãªãã‚ƒé§„ç›®ã‹ï¼Ÿ
 	uint8* image = ((uint8*)(binfo+1)) + (colors-1) * sizeof(RGBQUAD);
 	filehdr->bfSize	= image + 640*400/2 - dest ;
 	binfo->bmiHeader.biClrUsed = colors;
 	filehdr->bfOffBits = image - dest;
 	
-	// F•ÏŠ·
+	// è‰²å¤‰æ›
 	uint8* d = image;
 	for (int y=0; y<400; y += half ? 2 : 1)
 	{

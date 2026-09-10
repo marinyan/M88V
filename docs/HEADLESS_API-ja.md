@@ -66,7 +66,8 @@ PC-88ではC000H～FFFFH）の外へ置き、切替中のスタック参照に�
 
 ## T88テープ
 
-`POST /v1/tape/open`はGUI版の`Tape -> Open`と同じ`TapeManager`へT88を渡す。
+`POST /v1/tape/open`はWin32 GUI版の`Tape -> Open`と同じ`TapeManager`へT88を渡す。
+任意のraylib GUIには従来のTapeメニューはない。
 T88を開くだけでは転送・実行は始まらない。対象機種とテープ形式に合った
 MON/CLOAD等の操作が別途必要。PowerShellクライアントでは次を使う。
 

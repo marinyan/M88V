@@ -35,7 +35,7 @@ static void HaikuAudioCallback(void* cookie, void* buffer, size_t size, const me
     if (peak > 0) nonSilentCount++;
     callbackCount++;
     if ((callbackCount & 63u) == 1u) {
-        std::fprintf(stderr, "M88M: haiku audio callback count=%u peak=%d nonSilent=%u rate=%.0f\n",
+        std::fprintf(stderr, "M88V: haiku audio callback count=%u peak=%d nonSilent=%u rate=%.0f\n",
             callbackCount, peak, nonSilentCount, format.frame_rate);
     }
 }
@@ -68,16 +68,16 @@ void RaylibSound::Init(uint32 rate, int deviceBufferFrames) {
     format.byte_order = B_MEDIA_HOST_ENDIAN;
     format.buffer_size = (size_t)streamBufferFrames * 2 * sizeof(int16_t);
 
-    haikuPlayer = new BSoundPlayer(&format, "M88M", HaikuAudioCallback, nullptr, this);
+    haikuPlayer = new BSoundPlayer(&format, "M88V", HaikuAudioCallback, nullptr, this);
     status_t status = haikuPlayer ? haikuPlayer->InitCheck() : B_NO_MEMORY;
     if (status != B_OK) {
-        std::fprintf(stderr, "M88M: haiku audio init failed status=%ld\n", (long)status);
+        std::fprintf(stderr, "M88V: haiku audio init failed status=%ld\n", (long)status);
         delete haikuPlayer;
         haikuPlayer = nullptr;
         return;
     }
     haikuPlayer->SetHasData(true);
-    std::fprintf(stderr, "M88M: haiku audio init rate=%d bufferFrames=%d bufferBytes=%zu\n",
+    std::fprintf(stderr, "M88V: haiku audio init rate=%d bufferFrames=%d bufferBytes=%zu\n",
         sampleRate, streamBufferFrames, format.buffer_size);
 #else
     InitAudioDevice();
@@ -136,7 +136,7 @@ void RaylibSound::Start() {
     if (haikuPlayer) {
         status_t status = haikuPlayer->Start();
         haikuPlayer->SetHasData(true);
-        std::fprintf(stderr, "M88M: haiku audio started status=%ld\n", (long)status);
+        std::fprintf(stderr, "M88V: haiku audio started status=%ld\n", (long)status);
     }
 #else
     s_current_sound = this;

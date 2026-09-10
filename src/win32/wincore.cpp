@@ -24,6 +24,12 @@
 #include "module.h"
 #include "ui.h"
 #include "zlib/zlib.h"
+#include "development/environment.h"
+#include "development/rom_overlay.h"
+#include "development/binary_loader.h"
+#include "development/snapshot.h"
+#include "pc88/tapemgr.h"
+#include <filesystem>
 
 #define LOGNAME "wincore"
 #include "diag.h"
@@ -34,7 +40,7 @@ using namespace PC8801;
 #define SNAPSHOT_ID	"M88 SnapshotData"
 
 // ---------------------------------------------------------------------------
-//	\’z/Á–Å
+//	æ§‹ç¯‰/æ¶ˆæ»…
 //
 WinCore::WinCore()
 {
@@ -42,22 +48,57 @@ WinCore::WinCore()
 
 WinCore::~WinCore()
 {
-	PC88::DeInit();
 	Cleanup();
+	PC88::DeInit();
 }
 
 // ---------------------------------------------------------------------------
-//	‰Šú‰»
+//	åˆæœŸåŒ–
 //
 bool WinCore::Init
 (WinUI* _ui, HWND hwnd, Draw* draw, DiskManager* disk, WinKeyIF* keyb, 
- IConfigPropBase* cp, TapeManager* tape)
+ IConfigPropBase* cp, TapeManager* tape, const PC8801::Config& startupConfig)
 {
 	ui = _ui;
 	cfgprop = cp;
+	config = startupConfig;
+	nativeKeyboard = keyb;
 
-	if (!PC88::Init(draw, disk, tape))
+	// Both frontends use the same ROM aliases and corrected portable CPU.
+	std::filesystem::path romDirectory = std::filesystem::current_path();
+	extern char m88ini[MAX_PATH];
+	char iniRomDirectory[MAX_PATH] = {};
+	GetPrivateProfileStringA("M88p2 for Windows", "BIOSPath", "",
+	                        iniRomDirectory, MAX_PATH, m88ini);
+	if (const char* configured = M88V::EnvironmentValue("M88V_ROM_DIR", "M88M_ROM_DIR")) {
+		romDirectory = std::filesystem::u8path(configured);
+	} else if (*iniRomDirectory) {
+		romDirectory = std::filesystem::path(iniRomDirectory);
+	} else if (std::filesystem::is_directory(romDirectory / "roms")) {
+		romDirectory /= "roms";
+	} else if (std::filesystem::is_directory(romDirectory / "rom")) {
+		romDirectory /= "rom";
+	} else if (!std::filesystem::exists(romDirectory / "N88.ROM") &&
+	           !std::filesystem::exists(romDirectory / "PC88.ROM")) {
+		if (const char* appdata = std::getenv("APPDATA")) {
+			const auto fallback = std::filesystem::path(appdata) / "M88M" / "roms";
+			if (std::filesystem::is_directory(fallback)) romDirectory = fallback;
+		}
+	}
+	M88V::RomOverlay roms;
+	std::string romError;
+	const char* preferred = std::getenv("M88V_N80_ROM");
+	if (!roms.Prepare(romDirectory.u8string(), preferred ? preferred : "",
+	                 startupConfig.basicmode, &romError)) {
+		MessageBoxA(hwnd, romError.c_str(), "M88V ROM error", MB_OK | MB_ICONERROR);
 		return false;
+	}
+	const auto previousDirectory = std::filesystem::current_path();
+	romIdentity = roms.Fingerprint();
+	std::filesystem::current_path(std::filesystem::u8path(roms.Directory()));
+	const bool initialized = PC88::Init(draw, disk, tape, roms.Directory().c_str());
+	std::filesystem::current_path(previousDirectory);
+	if (!initialized) return false;
 
 	if (!sound.Init(this, hwnd, 0, 0))
 		return false;
@@ -80,7 +121,7 @@ bool WinCore::Init
 }
 
 // ---------------------------------------------------------------------------
-//	Œãn––
+//	å¾Œå§‹æœ«
 //
 bool WinCore::Cleanup()
 {
@@ -98,7 +139,7 @@ bool WinCore::Cleanup()
 }
 
 // ---------------------------------------------------------------------------
-//	ƒŠƒZƒbƒg
+//	ãƒªã‚»ãƒƒãƒˆ
 //
 void WinCore::Reset()
 {
@@ -106,8 +147,14 @@ void WinCore::Reset()
 	PC88::Reset();
 }
 
+bool WinCore::LoadBinary(const std::string& path, uint16_t address, std::string* message)
+{
+	LockObj lock(this);
+	return M88V::LoadDevelopmentBinary(*this, path, address, message);
+}
+
 // ---------------------------------------------------------------------------
-//	İ’è‚ğ”½‰f‚·‚é
+//	è¨­å®šã‚’åæ˜ ã™ã‚‹
 //
 void WinCore::ApplyConfig(PC8801::Config* cfg)
 {
@@ -132,7 +179,7 @@ void WinCore::ApplyConfig(PC8801::Config* cfg)
 
 
 // ---------------------------------------------------------------------------
-//	Windows —p‚ÌƒfƒoƒCƒX‚ğÚ‘±
+//	Windows ç”¨ã®ãƒ‡ãƒã‚¤ã‚¹ã‚’æ¥ç¶š
 //
 bool WinCore::ConnectDevices(WinKeyIF* keyb)
 {
@@ -168,23 +215,30 @@ bool WinCore::ConnectDevices(WinKeyIF* keyb)
 }
 
 // ---------------------------------------------------------------------------
-//	ƒXƒiƒbƒvƒVƒ‡ƒbƒg•Û‘¶
+//	ã‚¹ãƒŠãƒƒãƒ—ã‚·ãƒ§ãƒƒãƒˆä¿å­˜
 //
 bool WinCore::SaveShapshot(const char* filename)
 {
 	LockObj lock(this);
+	if (diskmgr->GetCurrentDisk(0) < 0 && diskmgr->GetCurrentDisk(1) < 0 && !tapemgr->IsOpen()) {
+		std::vector<uint8_t> output;
+		std::string error;
+		return M88V::Snapshot::Capture(*this, config, romIdentity,
+		    nativeKeyboard->CaptureDevelopmentState(), output, error) &&
+		    M88V::Snapshot::WriteFile(filename, output, error, true);
+	}
 
 	bool docomp = !!(config.flag2 & Config::compresssnapshot);
 
 	uint size = devlist.GetStatusSize();
-	uint8* buf = new uint8[docomp ? size * 129 / 64 + 20 : size];
+	uint8* buf = new uint8[docomp ? size + 4 + compressBound(size) : size];
 	if (!buf)
 		return false;
 	memset(buf, 0, size);
 
 	if (devlist.SaveStatus(buf))
 	{
-		ulong esize = size * 129 / 64 + 20-4;
+		ulong esize = docomp ? compressBound(size) : size;
 		if (docomp)
 		{
 			if (Z_OK != compress(buf+size+4, &esize, buf, size))
@@ -196,7 +250,7 @@ bool WinCore::SaveShapshot(const char* filename)
 			esize += 4;
 		}
 
-		SnapshotHeader ssh;
+		SnapshotHeader ssh{};
 		memcpy(ssh.id, SNAPSHOT_ID, 16);
 
 		ssh.major = ssmajor;
@@ -227,11 +281,22 @@ bool WinCore::SaveShapshot(const char* filename)
 }
 
 // ---------------------------------------------------------------------------
-//	ƒXƒiƒbƒvƒVƒ‡ƒbƒg•œŒ³
+//	ã‚¹ãƒŠãƒƒãƒ—ã‚·ãƒ§ãƒƒãƒˆå¾©å…ƒ
 //
 bool WinCore::LoadShapshot(const char* filename, const char* diskname)
 {
 	LockObj lock(this);
+	std::vector<uint8_t> bytes;
+	std::string error;
+	if (!M88V::Snapshot::ReadFile(filename, bytes, error)) return false;
+	if (bytes.size() >= 9 && memcmp(bytes.data(), "M88VSTATE", 9) == 0) {
+		auto frontend = nativeKeyboard->CaptureDevelopmentState();
+		if (bytes.size() < frontend.size() || bytes[bytes.size()-frontend.size()] != 'W' ||
+		    bytes[bytes.size()-frontend.size()+1] != 1) return false;
+		if (!M88V::Snapshot::Restore(*this, config, romIdentity, bytes, frontend, error)) return false;
+		nativeKeyboard->RestoreDevelopmentState(frontend);
+		return true;
+	}
 
 	FileIO file;
 	if (!file.Open(filename, FileIO::readonly))
@@ -266,7 +331,7 @@ bool WinCore::LoadShapshot(const char* filename, const char* diskname)
 	// Reset
 	PC88::Reset();
 
-	// “Ç‚İ‚İ
+	// èª­ã¿è¾¼ã¿
 
 	uint8* buf = new uint8[ssh.datasize];
 	bool r = false;
@@ -310,7 +375,7 @@ bool WinCore::LoadShapshot(const char* filename, const char* diskname)
 			}
 			if (!r)
 			{
-				statusdisplay.Show(70, 3000, "ƒo[ƒWƒ‡ƒ“‚ªˆÙ‚È‚è‚Ü‚·");
+				winstatusdisplay.Show(70, 3000, "ãƒãƒ¼ã‚¸ãƒ§ãƒ³ãŒç•°ãªã‚Šã¾ã™");
 				PC88::Reset();
 			}
 		}
@@ -320,7 +385,7 @@ bool WinCore::LoadShapshot(const char* filename, const char* diskname)
 }
 
 // ---------------------------------------------------------------------------
-//	ŠO•”‚à‚¶‚ã[‚é‚Ì‚½‚ß‚ÉƒCƒ“ƒ^[ƒtƒF[ƒX‚ğ’ñ‹Ÿ‚·‚é
+//	å¤–éƒ¨ã‚‚ã˜ã‚…ãƒ¼ã‚‹ã®ãŸã‚ã«ã‚¤ãƒ³ã‚¿ãƒ¼ãƒ•ã‚§ãƒ¼ã‚¹ã‚’æä¾›ã™ã‚‹
 //
 void* WinCore::QueryIF(REFIID id)
 {
@@ -385,7 +450,7 @@ bool WinCore::ConnectExternalDevices()
 }
 
 // ---------------------------------------------------------------------------
-//	PAD ‚ğÚ‘±
+//	PAD ã‚’æ¥ç¶š
 //
 /*
 bool WinCore::EnablePad(bool enable)
@@ -415,7 +480,7 @@ bool WinCore::EnablePad(bool enable)
 }
 */
 // ---------------------------------------------------------------------------
-//	ƒ}ƒEƒX‚ğÚ‘±
+//	ãƒã‚¦ã‚¹ã‚’æ¥ç¶š
 //
 /*
 bool WinCore::EnableMouse(bool enable)

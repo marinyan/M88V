@@ -34,10 +34,12 @@ public:
 	WinCore();
 	~WinCore();
 	bool Init(WinUI* ui, HWND hwnd, Draw* draw, DiskManager* diskmgr, 
-			  PC8801::WinKeyIF* keyb, IConfigPropBase* cpb, TapeManager* tapemgr); 
+			  PC8801::WinKeyIF* keyb, IConfigPropBase* cpb, TapeManager* tapemgr,
+			  const PC8801::Config& startupConfig);
 	bool Cleanup();
 
 	void Reset();
+	bool LoadBinary(const std::string& path, uint16_t address, std::string* message);
 	void ApplyConfig(PC8801::Config* config);
 	
 	
@@ -53,7 +55,7 @@ public:
 	void IFCALL Unlock() { seq.Unlock(); }
 
 private:
-//	Snapshot ÉwÉbÉ_Å[
+//	Snapshot „Éò„ÉÉ„ÉÄ„Éº
 	enum
 	{
 		ssmajor = 1, ssminor = 1,
@@ -88,6 +90,8 @@ private:
 	bool ConnectExternalDevices();
 
 	WinUI* ui;
+	uint32_t romIdentity = 0;
+	PC8801::WinKeyIF* nativeKeyboard = nullptr;
 	IConfigPropBase* cfgprop;
 
 	Sequencer seq;

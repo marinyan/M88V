@@ -9,6 +9,9 @@
 #ifndef Win32_CriticalSection_h
 #define Win32_CriticalSection_h
 
+#if defined(M88_NATIVE_WIN32)
+#include "../common/critsect.h"
+#else
 class CriticalSection
 {
 public:
@@ -29,5 +32,6 @@ public:
 private:
 	CRITICAL_SECTION css;
 };
+#endif
 
 #endif // Win32_CriticalSection_h

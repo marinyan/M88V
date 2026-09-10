@@ -42,8 +42,8 @@ static const char* kDiskImageFilter = "d88,d77,88i,dim,dx9,784,dsk,m3u,m3u8";
 class HaikuFileDialogLooper : public BLooper {
 public:
     HaikuFileDialogLooper()
-        : BLooper("M88M file dialog"),
-          doneSem(create_sem(0, "M88M file dialog done")),
+        : BLooper("M88V file dialog"),
+          doneSem(create_sem(0, "M88V file dialog done")),
           result(NFD_CANCEL) {
     }
 
@@ -419,7 +419,7 @@ void UIManager::DrawMainMenu(DiskManager* diskmgr, PC88* pc88, bool& shouldExit,
     float x = (float)GetScreenWidth() / 2 - width / 2;
     float y = (float)GetScreenHeight() / 2 - height / 2;
 
-    if (GuiWindowBox({ x, y, width, height }, "M88M Main Menu")) ToggleMenu(coreRunner);
+    if (GuiWindowBox({ x, y, width, height }, "M88V Main Menu")) ToggleMenu(coreRunner);
 
     float btnY = y + 45;
     float btnH = 26;
@@ -525,7 +525,7 @@ void UIManager::OpenBothDrives(DiskManager* diskmgr) {
 
     nfdresult_t result = OpenDiskImageDialog(&outPath, defaultPath);
 #ifdef __HAIKU__
-    std::fprintf(stderr, "M88M: nfd result=%s default=%s path=%s\n",
+    std::fprintf(stderr, "M88V: nfd result=%s default=%s path=%s\n",
         NfdResultName(result), defaultPath ? defaultPath : "(null)", outPath ? outPath : "(null)");
 #endif
     if (result == NFD_OKAY && outPath) {
@@ -1205,7 +1205,7 @@ void UIManager::DrawSettings(PC8801::Config& cfg, PC88* pc88, CoreRunner* coreRu
         content.height = curY - sY + 15;
     }
     else if (activeTab == 5) { // About
-        GuiLabel({ x + 20, pY, 500, 20 }, "M88M - PC-8801 Emulator for Modern Platforms");
+        GuiLabel({ x + 20, pY, 500, 20 }, "M88V - PC-8001 / PC-8801 Emulator");
         pY += 25;
         GuiLabel({ x + 20, pY, 500, 20 }, "Version: 1.2.0");
         pY += 35;
@@ -1230,8 +1230,10 @@ void UIManager::DrawSettings(PC8801::Config& cfg, PC88* pc88, CoreRunner* coreRu
 
         DrawLink(x + 20, pY, "Original M88: Copyright (C) cisc 1998-2003", "http://retropc.net/cisc/m88/");
         pY += 25;
+        DrawLink(x + 20, pY, "Based on M88M by bubio", "https://github.com/bubio/M88M");
+        pY += 25;
         DrawLink(x + 20, pY, "OPNA Emulation: fmgen by cisc", "http://retropc.net/cisc/m88/");
-        pY += 35;
+        pY += 25;
 
         GuiLabel({ x + 20, pY, 500, 20 }, "Powered by:");
         pY += 20;
@@ -1376,7 +1378,7 @@ void UIManager::MountDisk(DiskManager* diskmgr, const char* path, int img1, int 
 
     const char* diskPath = mountPath.c_str();
 #ifdef __HAIKU__
-    std::fprintf(stderr, "M88M: mounting disk: %s\n", diskPath);
+    std::fprintf(stderr, "M88V: mounting disk: %s\n", diskPath);
 #endif
     bool success = false;
     int availableImages = 0;
@@ -1425,7 +1427,7 @@ void UIManager::MountDisk(DiskManager* diskmgr, const char* path, int img1, int 
 
     if (success) {
 #ifdef __HAIKU__
-        std::fprintf(stderr, "M88M: disk mounted: %s\n", diskPath);
+        std::fprintf(stderr, "M88V: disk mounted: %s\n", diskPath);
 #endif
         AddRecent(mountPath);
         // If mounting to only one drive, show selector if multiple images exist
@@ -1448,7 +1450,7 @@ void UIManager::MountDisk(DiskManager* diskmgr, const char* path, int img1, int 
         }
     } else {
 #ifdef __HAIKU__
-        std::fprintf(stderr, "M88M: disk mount failed: %s\n", diskPath);
+        std::fprintf(stderr, "M88V: disk mount failed: %s\n", diskPath);
 #endif
         statusdisplay.Show(100, 3000, "Disk mount failed: %.96s", diskPath);
     }
@@ -1464,7 +1466,7 @@ void UIManager::OpenNativeDialog(DiskManager* diskmgr, int drive) {
 
     nfdresult_t result = OpenDiskImageDialog(&outPath, defaultPath);
 #ifdef __HAIKU__
-    std::fprintf(stderr, "M88M: nfd result=%s drive=%d default=%s path=%s\n",
+    std::fprintf(stderr, "M88V: nfd result=%s drive=%d default=%s path=%s\n",
         NfdResultName(result), drive, defaultPath ? defaultPath : "(null)", outPath ? outPath : "(null)");
 #endif
     if (result == NFD_OKAY && outPath) {

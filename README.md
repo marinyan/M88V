@@ -3,6 +3,8 @@
 PC-8001 / PC-8801向けの開発支援エミュレータです。
 [cisc氏のM88](http://retropc.net/cisc/m88/)を元にした
 [bubio/M88M](https://github.com/bubio/M88M)から派生しています。
+Windowsの標準GUIは[rururutan/m88](https://github.com/rururutan/m88)の従来Win32版を基礎にし、
+M88Vの修正済みコア・開発APIと組み合わせています。
 自作ゲームの開発で追加した機能を、ゲームに依存しない専用プロジェクトへ分離しました。
 取り込み元のリビジョンと改変内容は[UPSTREAM.md](UPSTREAM.md)に記載しています。
 
@@ -19,7 +21,8 @@ PC-8001 / PC-8801向けの開発支援エミュレータです。
 追加4機能の使用例・API・制限は[開発ツール](docs/DEVELOPMENT_TOOLS-ja.md)を参照してください。
 ゲーム固有のシナリオ・結果判定は各プロジェクトに置き、状態/入力の再現を共通化します。
 
-通常GUIのディスク管理・音声・設定などはM88Mから引き継いでいます。
+Windows GUIでは従来のメニューと`Tape → Open`を使えます。
+raylib版は任意選択として残しており、CPUコアと開発機能は共通です。
 HTTP APIは`127.0.0.1`だけで待ち受け、起動ごとのトークン認証を必要とします。
 接続ファイルにはトークンがあるため、公開・コミットしないでください。
 
@@ -79,10 +82,23 @@ C++デスクトップ開発環境を含むVisual Studio、CMake、PowerShell 7�
     -BasicMode N88V2 -Bin D:\path\to\program.bin -Address 0xB000
 ```
 
-`dist/windows-x64/m88m.exe`にWindows GUIビルドを収録しています。
-スクリプト・実行ファイル名や`M88M_ROM_DIR`など一部の名称は既存環境との互換性のため維持します。
+`dist/windows-x64/m88v.exe`にWindows GUIビルドを収録しています。
+Windows GUIの実行ファイル名は`m88m.exe`から`m88v.exe`へ変更しました。
+既存のショートカットや外部スクリプトでは参照先を更新してください。
+Win32版の設定はEXEと同じ場所の`m88v.ini`です。旧`M88.ini`やraylib版の
+`%APPDATA%/M88M/config.bin`とは共有せず、自動上書きもしません。
+CMakeの`M88M_*`オプション名は互換性のため維持します。
 GUIを直接起動する場合は既存の設定モードを保持し、BINの指定だけでN802に変更しません。
 `M88V_BASIC_MODE`を指定すると上の6モードから選べます。
+
+環境変数の正式名は`M88V_ROM_DIR`（GUI/headless共通）、`M88V_LOAD_BIN`と
+`M88V_LOAD_ADDRESS`（GUIのBIN直接起動）です。旧`M88M_ROM_DIR`、`M88M_LOAD_BIN`、
+`M88M_LOAD_ADDRESS`も互換用に受け付けます。両方ある場合は空でない`M88V_*`を優先し、
+新名が未設定または空なら旧名を参照します。headlessの`--rom-dir`は環境変数より優先します。
+
+Win32版は環境変数、INIの`BIOSPath`、EXEの隣の`roms`、`rom`、EXEと同じ場所のROM、
+従来の`%APPDATA%/M88M/roms`の順で参照先を選びます。
+詳細・raylib版のビルド・移行範囲は[Windows GUIの構成](docs/NATIVE_WINDOWS-ja.md)を参照してください。
 
 BIN直接ロードは物理主RAMへの書き込みで、バンク切替は行いません。
 `EFF0H`のランチャと`F000H`から下向きのスタックを使います。
@@ -92,7 +108,7 @@ BIN直接ロードは物理主RAMへの書き込みで、バンク切替は行�
 ## 検証
 
 ```powershell
-# ROM不要のCTest 4件は build_headless.ps1 でも実行
+# ROM不要のCTest（Windowsは8件）は build_headless.ps1 でも実行
 ctest --test-dir build/headless-msvc --output-on-failure
 
 # 手元のROMを使用する6モードの統合テスト

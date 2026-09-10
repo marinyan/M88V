@@ -21,7 +21,7 @@ using namespace PC8801;
 using namespace WinSoundDriver;
 
 // ---------------------------------------------------------------------------
-//	\’z/Á–Å
+//	æ§‹ç¯‰/æ¶ˆæ»…
 //
 WinSound::WinSound()
 : driver(0)
@@ -37,7 +37,7 @@ WinSound::~WinSound()
 }
 
 // ---------------------------------------------------------------------------
-//	‰Šú‰»
+//	åˆæœŸåŒ–
 //
 bool WinSound::Init
 (PC88* pc, HWND hwindow, uint rate, uint buflen)
@@ -54,7 +54,7 @@ bool WinSound::Init
 }
 
 // ---------------------------------------------------------------------------
-//	Œãˆ—
+//	å¾Œå‡¦ç†
 //
 void WinSound::Cleanup()
 {
@@ -68,7 +68,7 @@ void WinSound::Cleanup()
 }
 
 // ---------------------------------------------------------------------------
-//	‡¬EÄ¶ƒŒ[ƒg•ÏX
+//	åˆæˆãƒ»å†ç”Ÿãƒ¬ãƒ¼ãƒˆå¤‰æ›´
 //
 bool WinSound::ChangeRate(uint rate, uint buflen, bool waveout)
 {
@@ -76,7 +76,7 @@ bool WinSound::ChangeRate(uint rate, uint buflen, bool waveout)
 	{
 		if (IsDumping())
 		{
-			statusdisplay.Show(70, 3000, "wav ‘‚«o‚µ‚Ì‰¹İ’è‚Ì•ÏX‚Í‚Å‚«‚Ü‚¹‚ñ");
+			winstatusdisplay.Show(70, 3000, "wav æ›¸ãå‡ºã—æ™‚ã®éŸ³è¨­å®šã®å¤‰æ›´ã¯ã§ãã¾ã›ã‚“");
 			return false;
 		}
 
@@ -90,8 +90,8 @@ bool WinSound::ChangeRate(uint rate, uint buflen, bool waveout)
 			rate = 100; samprate = 0;
 		}
 		
-		// DirectSound: ƒTƒ“ƒvƒŠƒ“ƒOƒŒ[ƒg * ƒoƒbƒtƒ@’· / 2
-		// waveOut:     ƒTƒ“ƒvƒŠƒ“ƒOƒŒ[ƒg * ƒoƒbƒtƒ@’· * 2
+		// DirectSound: ã‚µãƒ³ãƒ—ãƒªãƒ³ã‚°ãƒ¬ãƒ¼ãƒˆ * ãƒãƒƒãƒ•ã‚¡é•· / 2
+		// waveOut:     ã‚µãƒ³ãƒ—ãƒªãƒ³ã‚°ãƒ¬ãƒ¼ãƒˆ * ãƒãƒƒãƒ•ã‚¡é•· * 2
 		int bufsize;
 		if (wodrv)
 			bufsize = (samprate * buflen / 1000 * 1) & ~15;
@@ -122,12 +122,12 @@ bool WinSound::ChangeRate(uint rate, uint buflen, bool waveout)
 				else if (useds2)
 				{
 					driver = new DriverDS2;
-					statusdisplay.Show(200, 8000, "sounddrv: using Notify driven driver");
+					winstatusdisplay.Show(200, 8000, "sounddrv: using Notify driven driver");
 				}
 				else
 				{
 					driver = new DriverDS;
-					statusdisplay.Show(200, 8000, "sounddrv: using timer driven driver");
+					winstatusdisplay.Show(200, 8000, "sounddrv: using timer driven driver");
 				}
 				
 				if (!driver || !driver->Init(&dumper, hwnd, samprate, 2, buflen))
@@ -136,7 +136,7 @@ bool WinSound::ChangeRate(uint rate, uint buflen, bool waveout)
 					if (!wodrv && useds2)
 					{
 						useds2 = false;
-						statusdisplay.Show(100, 3000, "IDirectSoundNotify ‚Íg—p‚Å‚«‚È‚¢‚æ‚¤‚Å‚·");
+						winstatusdisplay.Show(100, 3000, "IDirectSoundNotify ã¯ä½¿ç”¨ã§ããªã„ã‚ˆã†ã§ã™");
 						i = -1;
 					}
 				}
@@ -144,7 +144,7 @@ bool WinSound::ChangeRate(uint rate, uint buflen, bool waveout)
 			if (!driver)
 			{
 				SetRate(rate, 0);
-				statusdisplay.Show(70, 3000, "ƒI[ƒfƒBƒIƒfƒoƒCƒX‚ğg—p‚Å‚«‚Ü‚¹‚ñ");
+				winstatusdisplay.Show(70, 3000, "ã‚ªãƒ¼ãƒ‡ã‚£ã‚ªãƒ‡ãƒã‚¤ã‚¹ã‚’ä½¿ç”¨ã§ãã¾ã›ã‚“");
 			}
 		}
 	}
@@ -152,7 +152,7 @@ bool WinSound::ChangeRate(uint rate, uint buflen, bool waveout)
 }
 
 // ---------------------------------------------------------------------------
-//	İ’èXV
+//	è¨­å®šæ›´æ–°
 //
 void WinSound::ApplyConfig(const Config* config)
 {
@@ -188,7 +188,7 @@ bool WinSound::DumpEnd()
 }
 
 // ---------------------------------------------------------------------------
-//	‡¬‚Ìê‡
+//	åˆæˆã®å ´åˆ
 //
 //int WinSound::Get(Sample* dest, int samples)
 //{
@@ -256,12 +256,12 @@ bool SoundDumpPipe::DumpStart(char* filename)
 	
 	dumpstate_ = STANDBY;
 	dumpedsample_ = 0;
-	statusdisplay.Show(100, 0, "˜^‰¹‘Ò‹@’†`");
+	winstatusdisplay.Show(100, 0, "éŒ²éŸ³å¾…æ©Ÿä¸­ï½");
 	return true;
 }
 
 // ---------------------------------------------------------------------------
-//	ƒ_ƒ“ƒvI—¹
+//	ãƒ€ãƒ³ãƒ—çµ‚äº†
 //
 bool SoundDumpPipe::DumpStop()
 {
@@ -278,8 +278,8 @@ bool SoundDumpPipe::DumpStop()
 			mmioClose(hmmio_, 0), hmmio_ = 0;
 
 		int curtime = dumpedsample_ / dumprate_;
-		statusdisplay.Show
-			(100, 2500, "˜^‰¹I—¹ %s [%.2d:%.2d]", dumpfile_.c_str(), curtime/60, curtime%60);
+		winstatusdisplay.Show
+			(100, 2500, "éŒ²éŸ³çµ‚äº† %s [%.2d:%.2d]", dumpfile_.c_str(), curtime/60, curtime%60);
 	}
 	return true;
 }
@@ -313,7 +313,7 @@ void SoundDumpPipe::Dump(Sample* dest, int samples)
 {
 	int nch = GetChannels();
 
-	// –`“ª‚Ì–³‰¹•”‚ğƒJƒbƒg‚·‚é
+	// å†’é ­ã®ç„¡éŸ³éƒ¨ã‚’ã‚«ãƒƒãƒˆã™ã‚‹
 	if (dumpstate_ == STANDBY)
 	{
 		int i;
@@ -331,14 +331,14 @@ void SoundDumpPipe::Dump(Sample* dest, int samples)
 	{
 		mmioWrite(hmmio_, (char*) dest, samples * sizeof(Sample) * nch);
 
-		// ˜^‰¹ŠÔ•\¦
+		// éŒ²éŸ³æ™‚é–“è¡¨ç¤º
 		int prevtime = dumpedsample_ / dumprate_;
 		dumpedsample_ += samples;
 		int curtime = dumpedsample_ / dumprate_;
 		if (prevtime != curtime)
 		{
-			statusdisplay.Show
-				(101, 0, "˜^‰¹’† %s [%.2d:%.2d]", dumpfile_.c_str(), curtime / 60, curtime % 60);
+			winstatusdisplay.Show
+				(101, 0, "éŒ²éŸ³ä¸­ %s [%.2d:%.2d]", dumpfile_.c_str(), curtime / 60, curtime % 60);
 		}	
 	}
 }

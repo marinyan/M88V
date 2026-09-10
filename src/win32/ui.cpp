@@ -24,6 +24,10 @@
 #include "filetest.h"
 #include "winvars.h"
 #include "winexapi.h"
+#include "development/environment.h"
+#include "development/profile.h"
+#include "development/binary_loader.h"
+#include <filesystem>
 
 #define LOGNAME "ui"
 #include "diag.h"
@@ -36,7 +40,7 @@ using namespace PC8801;
 
 // ---------------------------------------------------------------------------
 //	WinUI 
-//	¶¬E”jŠü
+//	ç”Ÿæˆãƒ»ç ´æ£„
 //
 WinUI::WinUI(HINSTANCE hinstance)
 : hinst(hinstance), hwnd(0), diskmgr(0), tapemgr(0),
@@ -74,21 +78,29 @@ WinUI::~WinUI()
 
 // ---------------------------------------------------------------------------
 //	WinUI::InitM88
-//	M88 ‚Ì‰Šú‰»
+//	M88 ã®åˆæœŸåŒ–
 //
 bool WinUI::InitM88(const char* cmdline)
 {
 	active = false;
 	tapetitle[0] = 0;
 	
-	//	İ’è“Ç‚İ‚İ
+	//	è¨­å®šèª­ã¿è¾¼ã¿
 	LOG1("%d\tLoadConfig\n", timeGetTime());
+	config = PC8801::Config{};
 	PC8801::LoadConfig(&config, m88ini, true);
+	const char* mode = std::getenv("M88V_BASIC_MODE");
+	if (mode && *mode) {
+		if (!M88V::ParseBasicMode(mode, &config.basicmode)) {
+			MessageBox(hwnd, "Invalid M88V_BASIC_MODE", "M88V", MB_OK | MB_ICONERROR);
+			return false;
+		}
+	}
 
-	// ƒXƒe[ƒ^ƒXƒo[‰Šú‰»
-	statusdisplay.Init(hwnd);
+	// ã‚¹ãƒ†ãƒ¼ã‚¿ã‚¹ãƒãƒ¼åˆæœŸåŒ–
+	winstatusdisplay.Init(hwnd);
 
-	// WindowˆÊ’u•œŒ³
+	// Windowä½ç½®å¾©å…ƒ
 	ResizeWindow(640, 400);
 	LoadWindowPosition();
 	{
@@ -97,14 +109,14 @@ bool WinUI::InitM88(const char* cmdline)
 		point.x = rect.left; point.y = rect.top;
 	}
 
-	// ‰æ–Ê‰Šú‰»
+	// ç”»é¢åˆæœŸåŒ–
 	M88ChangeDisplay(hwnd, 0, 0);
 
-	//	Œ»İ‚Ì path •Û‘¶
+	//	ç¾åœ¨ã® path ä¿å­˜
 	char path[MAX_PATH];
 	GetCurrentDirectory(MAX_PATH, path);
 
-	//	ƒfƒoƒCƒX‚Ì‰Šú‰»
+	//	ãƒ‡ãƒã‚¤ã‚¹ã®åˆæœŸåŒ–
 	PC8801::LoadConfigDirectory(&config, m88ini, "BIOSPath", true);
 	
 	LOG1("%d\tdiskmanager\n", timeGetTime());
@@ -121,11 +133,11 @@ bool WinUI::InitM88(const char* cmdline)
 	if (!keyif.Init(hwnd))
 		return false;
 	LOG1("%d\tcore\n", timeGetTime());
-	if (!core.Init(this, hwnd, &draw, diskmgr, &keyif, &winconfig, tapemgr))
+	if (!core.Init(this, hwnd, &draw, diskmgr, &keyif, &winconfig, tapemgr, config))
 		return false;
 
 	
-	//	debug —pƒNƒ‰ƒX‰Šú‰»
+	//	debug ç”¨ã‚¯ãƒ©ã‚¹åˆæœŸåŒ–
 	LOG1("%d\tmonitors\n", timeGetTime());
 	opnmon.Init(core.GetOPN1(), core.GetSound());
 	memmon.Init(&core);
@@ -136,29 +148,42 @@ bool WinUI::InitM88(const char* cmdline)
 	iomon.Init(&core);
 	core.GetSound()->SetSoundMonitor(&opnmon);
 
-	//	Àsƒtƒ@ƒCƒ‹‰ü•Ïƒ`ƒFƒbƒN
+	//	å®Ÿè¡Œãƒ•ã‚¡ã‚¤ãƒ«æ”¹å¤‰ãƒã‚§ãƒƒã‚¯
 	LOG1("%d\tself test\n", timeGetTime());
 	if (!SanityCheck())
 		return false;
 
-	//	ƒGƒ~ƒ…ƒŒ[ƒVƒ‡ƒ“ŠJn
+	//	ã‚¨ãƒŸãƒ¥ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³é–‹å§‹
 	LOG1("%d\temulation begin\n", timeGetTime());
-	core.Wait(false);
-	active = true;
 	fullscreen = false;
 
-	//	İ’è”½‰f
+	//	è¨­å®šåæ˜ 
 	LOG1("%d\tapply cmdline\n", timeGetTime());
 	SetCurrentDirectory(path);
 	ApplyCommandLine(cmdline);
 	LOG1("%d\tapply config\n", timeGetTime());
 	ApplyConfig();
 	
-	//	ƒŠƒZƒbƒg
+	//	ãƒªã‚»ãƒƒãƒˆ
 	LOG1("%d\treset\n", timeGetTime());
 	core.Reset();
+	if (const char* bin = M88V::EnvironmentValue("M88V_LOAD_BIN", "M88M_LOAD_BIN")) {
+		uint16_t address = 0xc000;
+		const char* specified = M88V::EnvironmentValue("M88V_LOAD_ADDRESS", "M88M_LOAD_ADDRESS");
+		if (specified && !M88V::ParseLoadAddress(specified, &address)) {
+			MessageBoxA(hwnd, "Invalid M88V_LOAD_ADDRESS", "M88V", MB_OK | MB_ICONERROR);
+			return false;
+		}
+		std::string message;
+		if (!core.LoadBinary(bin, address, &message)) {
+			MessageBoxA(hwnd, message.c_str(), "M88V BIN error", MB_OK | MB_ICONERROR);
+			return false;
+		}
+	}
+	core.Wait(false);
+	active = true;
 
-	// ‚ ‚Æ‚²‚¿‚á‚²‚¿‚á‚µ‚½‚à‚Ì
+	// ã‚ã¨ã”ã¡ã‚ƒã”ã¡ã‚ƒã—ãŸã‚‚ã®
 	LOG1("%d\tetc\n", timeGetTime());
 	if (!diskinfo[0].filename[0])
 		PC8801::LoadConfigDirectory(&config, m88ini, "Directory", false);
@@ -169,7 +194,7 @@ bool WinUI::InitM88(const char* cmdline)
 
 // ---------------------------------------------------------------------------
 //	WinUI::CleanupM88
-//	M88 ‚ÌŒã•Ğ•t‚¯
+//	M88 ã®å¾Œç‰‡ä»˜ã‘
 //
 void WinUI::CleanupM88()
 {
@@ -182,7 +207,7 @@ void WinUI::CleanupM88()
 
 // ---------------------------------------------------------------------------
 //	WinUI::InitWindow
-//	M88 ‚Ì‘‹ì¬
+//	M88 ã®çª“ä½œæˆ
 //
 bool WinUI::InitWindow(int nwinmode)
 {
@@ -211,7 +236,7 @@ bool WinUI::InitWindow(int nwinmode)
 	hwnd = CreateWindowEx(
 		WS_EX_ACCEPTFILES,// | WS_EX_LAYERED,
 		szwinname,
-		"M88",
+		"M88V",
 		wstyle,
 		CW_USEDEFAULT,		// x
 		CW_USEDEFAULT,		// y
@@ -235,7 +260,7 @@ bool WinUI::InitWindow(int nwinmode)
 }
 
 // ---------------------------------------------------------------------------
-// ƒEƒCƒ“ƒhƒEˆÊ’u‚Ì•Û‘¶/•œ‹A
+// ã‚¦ã‚¤ãƒ³ãƒ‰ã‚¦ä½ç½®ã®ä¿å­˜/å¾©å¸°
 //
 void WinUI::SaveWindowPosition()
 {
@@ -267,7 +292,7 @@ void WinUI::LoadWindowPosition()
 
 // ---------------------------------------------------------------------------
 //	WinUI::Main
-//	ƒƒbƒZ[ƒWƒ‹[ƒv
+//	ãƒ¡ãƒƒã‚»ãƒ¼ã‚¸ãƒ«ãƒ¼ãƒ—
 //
 int WinUI::Main(const char* cmdline)
 {
@@ -310,13 +335,13 @@ int WinUI::Main(const char* cmdline)
 	if (opn)
 		opn->Reset();
 	CleanupM88();
-	statusdisplay.Cleanup();
+	winstatusdisplay.Cleanup();
 	return (int)msg.wParam;
 }
 
 // ---------------------------------------------------------------------------
 //	WinUI::WinProc
-//	ƒƒbƒZ[ƒWƒnƒ“ƒhƒ‰
+//	ãƒ¡ãƒƒã‚»ãƒ¼ã‚¸ãƒãƒ³ãƒ‰ãƒ©
 //
 #define PROC_MSG(msg, func)		case (msg): ret = (func)(hwnd, wp, lp); break
 
@@ -443,7 +468,7 @@ inline LRESULT WinUI::WmSysKeyUp(HWND hwnd, WPARAM wparam, LPARAM lparam)
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmActivate
-//	WM_ACTIVATE ƒnƒ“ƒhƒ‰
+//	WM_ACTIVATE ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmActivate(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
@@ -469,7 +494,7 @@ LRESULT WinUI::WmActivate(HWND hwnd, WPARAM wparam, LPARAM lparam)
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmQueryNewPalette
-//	WM_QUERYNEWPALETTE ƒnƒ“ƒhƒ‰
+//	WM_QUERYNEWPALETTE ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmQueryNewPalette(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
@@ -479,7 +504,7 @@ LRESULT WinUI::WmQueryNewPalette(HWND hwnd, WPARAM wparam, LPARAM lparam)
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmPaletteChanged
-//	WM_PALETTECHANGED ƒnƒ“ƒhƒ‰
+//	WM_PALETTECHANGED ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmPaletteChanged(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
@@ -493,7 +518,7 @@ LRESULT WinUI::WmPaletteChanged(HWND hwnd, WPARAM wparam, LPARAM lparam)
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmCommand
-//	WM_COMMAND ƒnƒ“ƒhƒ‰
+//	WM_COMMAND ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmCommand(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
@@ -713,7 +738,7 @@ LRESULT WinUI::WmCommand(HWND hwnd, WPARAM wparam, LPARAM lparam)
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmPaint
-//	WM_PAINT ƒnƒ“ƒhƒ‰
+//	WM_PAINT ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmPaint(HWND hwnd, WPARAM wp, LPARAM lp)
 {
@@ -723,7 +748,7 @@ LRESULT WinUI::WmPaint(HWND hwnd, WPARAM wp, LPARAM lp)
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmCreate
-//	WM_CREATE ƒnƒ“ƒhƒ‰
+//	WM_CREATE ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmCreate(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
@@ -749,7 +774,7 @@ LRESULT WinUI::WmCreate(HWND hwnd, WPARAM wparam, LPARAM lparam)
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmDestroy
-//	WM_DESTROY ƒnƒ“ƒhƒ‰
+//	WM_DESTROY ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmDestroy(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
@@ -760,25 +785,25 @@ LRESULT WinUI::WmDestroy(HWND hwnd, WPARAM wparam, LPARAM lparam)
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmClose
-//	WM_CLOSE ƒnƒ“ƒhƒ‰
+//	WM_CLOSE ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmClose(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
-	// Šm”F
+	// ç¢ºèª
 	if (config.flags & Config::askbeforereset)
 	{
 		SetGUIFlag(true);
-		int res = MessageBox(hwnd, "M88 ‚ğI—¹‚µ‚Ü‚·", "M88", MB_ICONEXCLAMATION | MB_OKCANCEL | MB_DEFBUTTON2);
+		int res = MessageBox(hwnd, "M88V ã‚’çµ‚äº†ã—ã¾ã™", "M88V", MB_ICONEXCLAMATION | MB_OKCANCEL | MB_DEFBUTTON2);
 		SetGUIFlag(false);
 		if (res != IDOK)
 			return 0;
 	}
 	
-	// ƒ^ƒCƒ}[”jŠü
+	// ã‚¿ã‚¤ãƒãƒ¼ç ´æ£„
 	KillTimer(hwnd, timerid);
 	timerid = 0;
 
-	// Šg’£ƒƒjƒ…[‚ğ”j‰ó‚·‚é
+	// æ‹¡å¼µãƒ¡ãƒ‹ãƒ¥ãƒ¼ã‚’ç ´å£Šã™ã‚‹
 	MENUITEMINFO mii;
 	memset(&mii, 0, sizeof(mii));
 	mii.cbSize = WINVAR(MIISIZE);
@@ -802,7 +827,7 @@ LRESULT WinUI::WmClose(HWND hwnd, WPARAM wparam, LPARAM lparam)
 			DestroyMenu(hmenuss[i]), hmenuss[i] = 0;
 	}
 
-	// ‘‹‚ğ•Â‚¶‚é
+	// çª“ã‚’é–‰ã˜ã‚‹
 	DestroyWindow(hwnd);
 	active = false;
 	
@@ -811,30 +836,31 @@ LRESULT WinUI::WmClose(HWND hwnd, WPARAM wparam, LPARAM lparam)
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmTimer
-//	WM_TIMER ƒnƒ“ƒhƒ‰
+//	WM_TIMER ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmTimer(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
+	winstatusdisplay.UpdateDisplay();
 	LOG2("WmTimer:%d(%d)\n", wparam, timerid);
 	if (wparam == timerid)
 	{
-		// ÀŒøü”g”,•\¦ƒtƒŒ[ƒ€”‚ğæ“¾
+		// å®ŸåŠ¹å‘¨æ³¢æ•°,è¡¨ç¤ºãƒ•ãƒ¬ãƒ¼ãƒ æ•°ã‚’å–å¾—
 		int	fcount = draw.GetDrawCount();
 		int	icount = core.GetExecCount();
 		
-		// ƒŒƒ|[ƒg‚·‚éê‡‚Íƒ^ƒCƒgƒ‹ƒo[‚ğXV
+		// ãƒ¬ãƒãƒ¼ãƒˆã™ã‚‹å ´åˆã¯ã‚¿ã‚¤ãƒˆãƒ«ãƒãƒ¼ã‚’æ›´æ–°
 		if (report)
 		{
 			if (active)
 			{
 				char buf[64];
 				uint freq = icount / 10000;
-				wsprintf(buf, "M88 - %d fps.  %d.%.2d MHz", 
+				wsprintf(buf, "M88V - %d fps.  %d.%.2d MHz",
 					fcount, freq / 100, freq % 100);
 				SetWindowText(hwnd, buf);
 			}
 			else
-				SetWindowText(hwnd, "M88");
+				SetWindowText(hwnd, "M88V");
 		}
 
 		if (resetwindowsize > 0)
@@ -850,9 +876,9 @@ LRESULT WinUI::WmTimer(HWND hwnd, WPARAM wparam, LPARAM lparam)
 		InvalidateRect(hwnd, 0, false);
 		return 0;
 	}
-	if (wparam == statusdisplay.GetTimerID())
+	if (wparam == winstatusdisplay.GetTimerID())
 	{
-		statusdisplay.Update();
+		winstatusdisplay.Update();
 		return 0;
 	}
 	return 0;
@@ -860,7 +886,7 @@ LRESULT WinUI::WmTimer(HWND hwnd, WPARAM wparam, LPARAM lparam)
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmInitMenu
-//	WM_INITMENU ƒnƒ“ƒhƒ‰
+//	WM_INITMENU ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmInitMenu(HWND hwnd, WPARAM wp, LPARAM lp)
 {
@@ -922,7 +948,7 @@ LRESULT WinUI::WmInitMenu(HWND hwnd, WPARAM wp, LPARAM lp)
 //
 LRESULT WinUI::WmSize(HWND hwnd, WPARAM wp, LPARAM lp)
 {
-	HWND hwndstatus = statusdisplay.GetHWnd();
+	HWND hwndstatus = winstatusdisplay.GetHWnd();
 	if (hwndstatus)
 		PostMessage(hwndstatus, WM_SIZE, wp, lp);
 	active = wp != SIZE_MINIMIZED;
@@ -932,14 +958,14 @@ LRESULT WinUI::WmSize(HWND hwnd, WPARAM wp, LPARAM lp)
 
 // ---------------------------------------------------------------------------
 //	WinUI::ReportError
-//	ƒGƒ‰[•\¦
+//	ã‚¨ãƒ©ãƒ¼è¡¨ç¤º
 //
 void WinUI::ReportError()
 {
 	const char* errtext = Error::GetErrorText();
 	if (errtext)
 	{
-		::MessageBox(hwnd, errtext, "M88", MB_ICONERROR | MB_OK);
+		::MessageBox(hwnd, errtext, "M88V", MB_ICONERROR | MB_OK);
 	}
 }
 
@@ -950,7 +976,7 @@ LRESULT WinUI::M88ApplyConfig(HWND, WPARAM newconfig, LPARAM)
 {
 	if (newconfig)
 	{
-		// —–\‚Å‚·‚ÈB
+		// ä¹±æš´ã§ã™ãªã€‚
 		if (memcmp(&config, (PC8801::Config*)newconfig, sizeof(PC8801::Config)))
 		{
 			config = *((PC8801::Config*)newconfig);
@@ -1018,7 +1044,7 @@ void WinUI::Reset()
 	if (config.flags & Config::askbeforereset)
 	{
 		SetGUIFlag(true);
-		int res = MessageBox(hwnd, "ƒŠƒZƒbƒg‚µ‚Ü‚·‚©H", "M88", MB_ICONQUESTION | MB_OKCANCEL | MB_DEFBUTTON2);
+		int res = MessageBox(hwnd, "ãƒªã‚»ãƒƒãƒˆã—ã¾ã™ã‹ï¼Ÿ", "M88V", MB_ICONQUESTION | MB_OKCANCEL | MB_DEFBUTTON2);
 		SetGUIFlag(false);
 		if (res != IDOK)
 			return;
@@ -1031,7 +1057,7 @@ void WinUI::Reset()
 
 // ---------------------------------------------------------------------------
 //	ChangeDiskImage
-//	ƒfƒBƒXƒN“ü‚ê‘Ö‚¦
+//	ãƒ‡ã‚£ã‚¹ã‚¯å…¥ã‚Œæ›¿ãˆ
 //
 void WinUI::ChangeDiskImage(HWND hwnd, int drive)
 {
@@ -1044,8 +1070,8 @@ void WinUI::ChangeDiskImage(HWND hwnd, int drive)
 	if (!diskmgr->Unmount(drive))
 	{
 		MessageBox(hwnd, 
-			"DiskManger::Unmount failed\nƒfƒBƒXƒN‚Ìæ‚èŠO‚µ‚É¸”s‚µ‚Ü‚µ‚½.",
-			"M88",
+			"DiskManger::Unmount failed\nãƒ‡ã‚£ã‚¹ã‚¯ã®å–ã‚Šå¤–ã—ã«å¤±æ•—ã—ã¾ã—ãŸ.",
+			"M88V",
 			MB_ICONERROR | MB_OK);
 	}
 
@@ -1072,7 +1098,7 @@ void WinUI::ChangeDiskImage(HWND hwnd, int drive)
 
 	if (isopen)
 	{
-		// w’è‚³‚ê‚½ƒtƒ@ƒCƒ‹‚Í‘¶İ‚·‚é‚©H
+		// æŒ‡å®šã•ã‚ŒãŸãƒ•ã‚¡ã‚¤ãƒ«ã¯å­˜åœ¨ã™ã‚‹ã‹ï¼Ÿ
 		bool createnew = false;
 		if (!diskmgr->IsImageOpen(filename))
 		{
@@ -1081,14 +1107,14 @@ void WinUI::ChangeDiskImage(HWND hwnd, int drive)
 			{
 				if (file.GetError() == FileIO::file_not_found)
 				{
-					// ƒtƒ@ƒCƒ‹‚ª‘¶İ‚µ‚È‚¢
+					// ãƒ•ã‚¡ã‚¤ãƒ«ãŒå­˜åœ¨ã—ãªã„
 					createnew = true;
 					if (!newdisk.Show(hinst, hwnd))
 						return;
 				}
 				else
 				{
-					// ‰½‚ç‚©‚Ì——R‚ÅƒAƒNƒZƒX‚Å‚«‚È‚¢
+					// ä½•ã‚‰ã‹ã®ç†ç”±ã§ã‚¢ã‚¯ã‚»ã‚¹ã§ããªã„
 					return;
 				}
 			}
@@ -1117,11 +1143,11 @@ void WinUI::ChangeDiskImage(HWND hwnd, int drive)
 }
 
 // ---------------------------------------------------------------------------
-//	“K“–‚ÉƒfƒBƒXƒNƒCƒ[ƒW‚ğŠJ‚­
+//	é©å½“ã«ãƒ‡ã‚£ã‚¹ã‚¯ã‚¤ãƒ¡ãƒ¼ã‚¸ã‚’é–‹ã
 //
 void WinUI::OpenDiskImage(const char* path)
 {
-	// ƒfƒBƒXƒNƒCƒ[ƒW‚ğƒ}ƒEƒ“ƒg‚·‚é
+	// ãƒ‡ã‚£ã‚¹ã‚¯ã‚¤ãƒ¡ãƒ¼ã‚¸ã‚’ãƒã‚¦ãƒ³ãƒˆã™ã‚‹
 	OpenDiskImage(0, path, 0, 0, false);
 	if (diskmgr->GetNumDisks(0) > 1)
 	{
@@ -1135,7 +1161,7 @@ void WinUI::OpenDiskImage(const char* path)
 }
 
 // ---------------------------------------------------------------------------
-//	ƒtƒ@ƒCƒ‹ƒl[ƒ€‚Ì•”•ª‚ğæ‚èo‚·
+//	ãƒ•ã‚¡ã‚¤ãƒ«ãƒãƒ¼ãƒ ã®éƒ¨åˆ†ã‚’å–ã‚Šå‡ºã™
 //
 static void GetFileNameTitle(char* title, size_t tlen, const char* name)
 {
@@ -1152,7 +1178,7 @@ static void GetFileNameTitle(char* title, size_t tlen, const char* name)
 
 // ---------------------------------------------------------------------------
 //	OpenDiskImage
-//	ƒfƒBƒXƒNƒCƒ[ƒW‚ğŠJ‚­
+//	ãƒ‡ã‚£ã‚¹ã‚¯ã‚¤ãƒ¡ãƒ¼ã‚¸ã‚’é–‹ã
 //
 bool WinUI::OpenDiskImage
 (int drive, const char* name, bool readonly, int id, bool create)
@@ -1176,7 +1202,7 @@ bool WinUI::OpenDiskImage
 
 // ---------------------------------------------------------------------------
 //	SelectDisk
-//	ƒfƒBƒXƒNƒZƒbƒg
+//	ãƒ‡ã‚£ã‚¹ã‚¯ã‚»ãƒƒãƒˆ
 //
 bool WinUI::SelectDisk(uint drive, int id, bool menuonly)
 {
@@ -1203,7 +1229,7 @@ bool WinUI::SelectDisk(uint drive, int id, bool menuonly)
 
 // ---------------------------------------------------------------------------
 //	CreateDiskMenu
-//	ƒ}ƒ‹ƒ`ƒfƒBƒXƒNƒCƒ[ƒW—pƒƒjƒ…[‚Ìì¬
+//	ãƒãƒ«ãƒãƒ‡ã‚£ã‚¹ã‚¯ã‚¤ãƒ¡ãƒ¼ã‚¸ç”¨ãƒ¡ãƒ‹ãƒ¥ãƒ¼ã®ä½œæˆ
 //
 bool WinUI::CreateDiskMenu(uint drive)
 {
@@ -1216,7 +1242,7 @@ bool WinUI::CreateDiskMenu(uint drive)
 	int ndisks = Min(diskmgr->GetNumDisks(drive), 60);
 	if (ndisks)
 	{
-		// ƒƒjƒ…[ì¬
+		// ãƒ¡ãƒ‹ãƒ¥ãƒ¼ä½œæˆ
 		dinfo.hmenu = CreatePopupMenu();
 		if (!dinfo.hmenu)
 			return false;
@@ -1274,7 +1300,7 @@ bool WinUI::CreateDiskMenu(uint drive)
 
 // ---------------------------------------------------------------------------
 //	ChangeTapeImage
-//	ƒfƒBƒXƒN“ü‚ê‘Ö‚¦
+//	ãƒ‡ã‚£ã‚¹ã‚¯å…¥ã‚Œæ›¿ãˆ
 //
 void WinUI::ChangeTapeImage()
 {
@@ -1339,13 +1365,13 @@ void WinUI::OpenTapeImage(const char* filename)
 
 // ---------------------------------------------------------------------------
 //	WinUI::ResizeWindow
-//	ƒEƒBƒ“ƒhƒE‚Ì‘å‚«‚³‚ğ•Ï‚¦‚é
+//	ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã®å¤§ãã•ã‚’å¤‰ãˆã‚‹
 //
 void WinUI::ResizeWindow(uint width, uint height)
 {
 	RECT rect;
 	rect.left = 0;	rect.right = width;
-	rect.top  = 0;  rect.bottom = height + statusdisplay.GetHeight();
+	rect.top  = 0;  rect.bottom = height + winstatusdisplay.GetHeight();
 
 	AdjustWindowRectEx(&rect, wstyle, TRUE, 0);
 	SetWindowPos(hwnd, 0, 0, 0, rect.right-rect.left, rect.bottom-rect.top,
@@ -1355,34 +1381,34 @@ void WinUI::ResizeWindow(uint width, uint height)
 }
 
 // ---------------------------------------------------------------------------
-//	ƒXƒe[ƒ^ƒXƒo[•\¦Ø‚è‘Ö‚¦
+//	ã‚¹ãƒ†ãƒ¼ã‚¿ã‚¹ãƒãƒ¼è¡¨ç¤ºåˆ‡ã‚Šæ›¿ãˆ
 //
 void WinUI::ShowStatusWindow()
 {
 	if (!fullscreen)
 	{
 		if (config.flags & PC8801::Config::showstatusbar)
-			statusdisplay.Enable((config.flags & PC8801::Config::showfdcstatus) != 0);
+			winstatusdisplay.Enable((config.flags & PC8801::Config::showfdcstatus) != 0);
 		else
-			statusdisplay.Disable();
+			winstatusdisplay.Disable();
 		ResizeWindow(640, 400);
 	}
 }
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmDrawItem
-//	WM_DRAWITEM ƒnƒ“ƒhƒ‰
+//	WM_DRAWITEM ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmDrawItem(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
 	if ((UINT) wparam == 1)
-		statusdisplay.DrawItem((DRAWITEMSTRUCT*)lparam);
+		winstatusdisplay.DrawItem((DRAWITEMSTRUCT*)lparam);
 	return TRUE;
 }
 
 // ---------------------------------------------------------------------------
 //	WinUI::ToggleDisplayMode
-//	‘S‰æ–ÊEƒEƒBƒ“ƒhƒE•\¦Ø‘Ö  (ALT+ENTER)
+//	å…¨ç”»é¢ãƒ»ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦è¡¨ç¤ºåˆ‡æ›¿  (ALT+ENTER)
 //
 void WinUI::ToggleDisplayMode()
 {
@@ -1394,13 +1420,13 @@ void WinUI::ToggleDisplayMode()
 	fullscreen = !fullscreen;
 
 	if (fullscreen)
-		statusdisplay.Disable();
+		winstatusdisplay.Disable();
 	ChangeDisplayType(fullscreen);
 }
 
 // ---------------------------------------------------------------------------
 //	WinUI::ChangeDisplayType
-//	•\¦ƒƒ\ƒbƒh•ÏX
+//	è¡¨ç¤ºãƒ¡ã‚½ãƒƒãƒ‰å¤‰æ›´
 //
 void WinUI::ChangeDisplayType(bool savepos)
 {
@@ -1420,17 +1446,17 @@ void WinUI::ChangeDisplayType(bool savepos)
 
 // ---------------------------------------------------------------------------
 //	WinUI::M88ChangeDisplay
-//	•\¦ƒƒ\ƒbƒh‚Ì•ÏX
+//	è¡¨ç¤ºãƒ¡ã‚½ãƒƒãƒ‰ã®å¤‰æ›´
 //
 LRESULT WinUI::M88ChangeDisplay(HWND hwnd, WPARAM, LPARAM)
 {
-	// ‰æ–Êƒhƒ‰ƒCƒo‚ÌØ‘Ö‚¦
-	// ƒhƒ‰ƒCƒo‚ª false ‚ğ•Ô‚µ‚½ê‡ GDI ƒhƒ‰ƒCƒo‚ªg—p‚³‚ê‚é‚±‚Æ‚É‚È‚é
+	// ç”»é¢ãƒ‰ãƒ©ã‚¤ãƒã®åˆ‡æ›¿ãˆ
+	// ãƒ‰ãƒ©ã‚¤ãƒãŒ false ã‚’è¿”ã—ãŸå ´åˆ GDI ãƒ‰ãƒ©ã‚¤ãƒãŒä½¿ç”¨ã•ã‚Œã‚‹ã“ã¨ã«ãªã‚‹
 	if (!draw.ChangeDisplayMode
 				(fullscreen, (config.flags & PC8801::Config::force480) != 0))
 		fullscreen = false;
 
-	// ƒEƒBƒ“ƒhƒEƒXƒ^ƒCƒ‹ŠÖŒW‚Ì•ÏX
+	// ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã‚¹ã‚¿ã‚¤ãƒ«é–¢ä¿‚ã®å¤‰æ›´
 	wstyle = (DWORD)GetWindowLongPtr(hwnd, GWL_STYLE);
 	LONG_PTR exstyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
 
@@ -1458,7 +1484,7 @@ LRESULT WinUI::M88ChangeDisplay(HWND hwnd, WPARAM, LPARAM)
 		exstyle |= WS_EX_TOPMOST;
 		SetWindowLongPtr(hwnd, GWL_STYLE, wstyle);
 		SetWindowLongPtr(hwnd, GWL_EXSTYLE, exstyle);
-		SetWindowText(hwnd, "M88");
+		SetWindowText(hwnd, "M88V");
 
 		SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
 
@@ -1473,7 +1499,7 @@ LRESULT WinUI::M88ChangeDisplay(HWND hwnd, WPARAM, LPARAM)
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmEnterMenuLoop
-//	WM_ENTERMENULOOP ƒnƒ“ƒhƒ‰
+//	WM_ENTERMENULOOP ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmEnterMenuLoop(HWND, WPARAM wp, LPARAM)
 {
@@ -1487,7 +1513,7 @@ LRESULT WinUI::WmEnterMenuLoop(HWND, WPARAM wp, LPARAM)
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmExitMenuLoop
-//	WM_EXITMENULOOP ƒnƒ“ƒhƒ‰
+//	WM_EXITMENULOOP ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmExitMenuLoop(HWND, WPARAM wp, LPARAM)
 {
@@ -1500,7 +1526,7 @@ LRESULT WinUI::WmExitMenuLoop(HWND, WPARAM wp, LPARAM)
 }
 
 // ---------------------------------------------------------------------------
-//	ƒ{ƒŠƒ…[ƒ€•ÏX
+//	ãƒœãƒªãƒ¥ãƒ¼ãƒ å¤‰æ›´
 //
 LRESULT WinUI::M88ChangeVolume(HWND, WPARAM c, LPARAM)
 {
@@ -1511,7 +1537,7 @@ LRESULT WinUI::M88ChangeVolume(HWND, WPARAM c, LPARAM)
 
 // ---------------------------------------------------------------------------
 //	WinUI::WmDisplayChange
-//	WM_DISPLAYCHANGE ƒnƒ“ƒhƒ‰
+//	WM_DISPLAYCHANGE ãƒãƒ³ãƒ‰ãƒ©
 //
 LRESULT WinUI::WmDisplayChange(HWND hwnd, WPARAM wp, LPARAM lp)
 {
@@ -1521,23 +1547,23 @@ LRESULT WinUI::WmDisplayChange(HWND hwnd, WPARAM wp, LPARAM lp)
 
 // ---------------------------------------------------------------------------
 //	WinUI::DropFiles
-//	WM_DROPFILES ƒnƒ“ƒhƒ‰
-//	ŒßŒã‚s‚ÌÀ‘•‚ğ‚à‚Æ‚Éì¬‚µ‚Ü‚µ‚½D
+//	WM_DROPFILES ãƒãƒ³ãƒ‰ãƒ©
+//	åˆå¾Œï¼´æ°ã®å®Ÿè£…ã‚’ã‚‚ã¨ã«ä½œæˆã—ã¾ã—ãŸï¼
 //
 LRESULT WinUI::WmDropFiles(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
 	HDROP hdrop = (HDROP) wparam;
 
-	// ó‚¯æ‚Á‚½ƒtƒ@ƒCƒ‹‚Ì”‚ğŠm”F
+	// å—ã‘å–ã£ãŸãƒ•ã‚¡ã‚¤ãƒ«ã®æ•°ã‚’ç¢ºèª
 	int nfiles = DragQueryFile(hdrop, ~0, 0, 0);
 	if (nfiles != 1)
 	{
-		statusdisplay.Show(50, 3000, "ƒhƒƒbƒv‚Å‚«‚é‚Ì‚Íƒtƒ@ƒCƒ‹‚P‚Â‚¾‚¯‚Å‚·.");
+		winstatusdisplay.Show(50, 3000, "ãƒ‰ãƒ­ãƒƒãƒ—ã§ãã‚‹ã®ã¯ãƒ•ã‚¡ã‚¤ãƒ«ï¼‘ã¤ã ã‘ã§ã™.");
 		DragFinish(hdrop);
 		return 0;
 	}
 
-	// ƒtƒ@ƒCƒ‹ƒl[ƒ€‚ğæ“¾
+	// ãƒ•ã‚¡ã‚¤ãƒ«ãƒãƒ¼ãƒ ã‚’å–å¾—
 	char path[MAX_PATH];
 	DragQueryFile(hdrop, 0, path, 512);
 	DragFinish(hdrop);
@@ -1553,13 +1579,13 @@ LRESULT WinUI::WmDropFiles(HWND hwnd, WPARAM wparam, LPARAM lparam)
 	if (strcmpi(ext, ".d88") == 0) {
 		OpenDiskImage(path);
 
-		// ³í‚Éƒ}ƒEƒ“ƒg‚Å‚«‚½‚çƒŠƒZƒbƒg
+		// æ­£å¸¸ã«ãƒã‚¦ãƒ³ãƒˆã§ããŸã‚‰ãƒªã‚»ãƒƒãƒˆ
 		if (diskinfo[0].filename[0])
 		  Reset();
 	} else if (strcmpi(ext, ".t88") == 0) {
 		OpenTapeImage(path);
 	} else {
-		statusdisplay.Show(50, 3000, "”ñ‘Î‰‚Ìƒtƒ@ƒCƒ‹‚Å‚·.");
+		winstatusdisplay.Show(50, 3000, "éå¯¾å¿œã®ãƒ•ã‚¡ã‚¤ãƒ«ã§ã™.");
 	}
 
 	return 0;
@@ -1589,7 +1615,7 @@ void WinUI::CaptureScreen()
 					 time.wDay, time.wHour, time.wMinute, time.wSecond,
 					 time.wMilliseconds / 10);
 			save = true;
-			statusdisplay.Show(80, 1500, "‰æ–ÊƒCƒ[ƒW‚ğ %s ‚É•Û‘¶‚µ‚Ü‚µ‚½", filename);
+			winstatusdisplay.Show(80, 1500, "ç”»é¢ã‚¤ãƒ¡ãƒ¼ã‚¸ã‚’ %s ã«ä¿å­˜ã—ã¾ã—ãŸ", filename);
 		}
 		else
 		{
@@ -1624,7 +1650,7 @@ void WinUI::CaptureScreen()
 }
 
 // ---------------------------------------------------------------------------
-//	ƒ}ƒEƒXó‘Ô‚Ìæ“¾
+//	ãƒã‚¦ã‚¹çŠ¶æ…‹ã®å–å¾—
 //
 LRESULT WinUI::WmLButtonDown(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
@@ -1667,7 +1693,7 @@ LRESULT WinUI::WmRButtonUp(HWND hwnd, WPARAM wparam, LPARAM lparam)
 }
 
 // ---------------------------------------------------------------------------
-//	ƒEƒBƒ“ƒhƒEˆÚ“®ƒ‚[ƒh‚É“ü‚éEo‚é
+//	ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ç§»å‹•ãƒ¢ãƒ¼ãƒ‰ã«å…¥ã‚‹ãƒ»å‡ºã‚‹
 //
 LRESULT WinUI::WmEnterSizeMove(HWND hwnd, WPARAM, LPARAM)
 {
@@ -1779,12 +1805,12 @@ LRESULT WinUI::WmSetCursor(HWND hwnd, WPARAM wp, LPARAM lp)
 			}
 		}
 	}
-//	statusdisplay.Show(0, 0, "%d", LOWORD(lp));
+//	winstatusdisplay.Show(0, 0, "%d", LOWORD(lp));
 	return DefWindowProc(hwnd, WM_SETCURSOR, wp, lp);
 }
 
 // ---------------------------------------------------------------------------
-//	GUI ‘€ìƒ‚[ƒh‚É“ü‚é
+//	GUI æ“ä½œãƒ¢ãƒ¼ãƒ‰ã«å…¥ã‚‹
 //
 void WinUI::SetGUIFlag(bool gui)
 {
@@ -1798,7 +1824,7 @@ void WinUI::SetGUIFlag(bool gui)
 }
 
 // ---------------------------------------------------------------------------
-//	ƒXƒiƒbƒvƒVƒ‡ƒbƒg‚Ì–¼‘O‚ğì‚é
+//	ã‚¹ãƒŠãƒƒãƒ—ã‚·ãƒ§ãƒƒãƒˆã®åå‰ã‚’ä½œã‚‹
 //
 void WinUI::GetSnapshotName(char* name, int n)
 {
@@ -1826,22 +1852,22 @@ void WinUI::GetSnapshotName(char* name, int n)
 }
 
 // ---------------------------------------------------------------------------
-//	ƒXƒiƒbƒvƒVƒ‡ƒbƒg‚Ì‘‚İ
+//	ã‚¹ãƒŠãƒƒãƒ—ã‚·ãƒ§ãƒƒãƒˆã®æ›¸è¾¼ã¿
 //
 void WinUI::SaveSnapshot(int n)
 {
 	char name[MAX_PATH];
 	GetSnapshotName(name, n);
 	if (core.SaveShapshot(name))
-		statusdisplay.Show(80, 3000, "%s ‚É•Û‘¶‚µ‚Ü‚µ‚½", name);
+		winstatusdisplay.Show(80, 3000, "%s ã«ä¿å­˜ã—ã¾ã—ãŸ", name);
 	else
-		statusdisplay.Show(80, 3000, "%s ‚É•Û‘¶‚Å‚«‚Ü‚¹‚ñ", name);
+		winstatusdisplay.Show(80, 3000, "%s ã«ä¿å­˜ã§ãã¾ã›ã‚“", name);
 	currentsnapshot = n;
 	snapshotchanged = true;
 }
 
 // ---------------------------------------------------------------------------
-//	ƒXƒiƒbƒvƒVƒ‡ƒbƒg‚Ì“Ç‚İ‚İ
+//	ã‚¹ãƒŠãƒƒãƒ—ã‚·ãƒ§ãƒƒãƒˆã®èª­ã¿è¾¼ã¿
 //
 void WinUI::LoadSnapshot(int n)
 {
@@ -1859,9 +1885,9 @@ void WinUI::LoadSnapshot(int n)
 	}
 
 	if (r)
-		statusdisplay.Show(80, 2500, "%s ‚©‚ç•œŒ³‚µ‚Ü‚µ‚½", name);
+		winstatusdisplay.Show(80, 2500, "%s ã‹ã‚‰å¾©å…ƒã—ã¾ã—ãŸ", name);
 	else
-		statusdisplay.Show(80, 2500, "%s ‚©‚ç•œŒ³‚Å‚«‚Ü‚¹‚ñ", name);
+		winstatusdisplay.Show(80, 2500, "%s ã‹ã‚‰å¾©å…ƒã§ãã¾ã›ã‚“", name);
 	for (uint i=0; i<2; i++)
 		CreateDiskMenu(i);
 	currentsnapshot = n;
@@ -1869,7 +1895,7 @@ void WinUI::LoadSnapshot(int n)
 }	
 
 // ---------------------------------------------------------------------------
-//	ƒXƒiƒbƒvƒVƒ‡ƒbƒg—p‚Ìƒƒjƒ…[‚ğì¬
+//	ã‚¹ãƒŠãƒƒãƒ—ã‚·ãƒ§ãƒƒãƒˆç”¨ã®ãƒ¡ãƒ‹ãƒ¥ãƒ¼ã‚’ä½œæˆ
 //
 bool WinUI::MakeSnapshotMenu()
 {
@@ -1878,7 +1904,7 @@ bool WinUI::MakeSnapshotMenu()
 		int i;
 		snapshotchanged = false;
 
-		// ƒƒjƒ…[‚ğŒ³‚É–ß‚·
+		// ãƒ¡ãƒ‹ãƒ¥ãƒ¼ã‚’å…ƒã«æˆ»ã™
 		MENUITEMINFO mii;
 		memset(&mii, 0, sizeof(mii));
 		mii.cbSize = WINVAR(MIISIZE);
@@ -1887,7 +1913,7 @@ bool WinUI::MakeSnapshotMenu()
 		SetMenuItemInfo(GetMenu(hwnd), IDM_SNAPSHOT_LOAD, false, &mii);
 		SetMenuItemInfo(GetMenu(hwnd), IDM_SNAPSHOT_SAVE, false, &mii);
 		
-		// ƒƒjƒ…[ì¬
+		// ãƒ¡ãƒ‹ãƒ¥ãƒ¼ä½œæˆ
 		for (i=0; i<2; i++)
 		{
 			if (IsMenu(hmenuss[i]))
@@ -1897,7 +1923,7 @@ bool WinUI::MakeSnapshotMenu()
 				return false;
 		}
 		
-		// ƒXƒiƒbƒvƒVƒ‡ƒbƒg‚ğŒŸõ
+		// ã‚¹ãƒŠãƒƒãƒ—ã‚·ãƒ§ãƒƒãƒˆã‚’æ¤œç´¢
 		int entries = 0;
 		FileFinder ff;
 		char buf[MAX_PATH];
@@ -1912,7 +1938,7 @@ bool WinUI::MakeSnapshotMenu()
 				entries |= 1 << n;
 		}
 
-		// ƒƒjƒ…[ì¬
+		// ãƒ¡ãƒ‹ãƒ¥ãƒ¼ä½œæˆ
 		for (i=0; i<10; i++)
 		{
 			wsprintf(buf, "&%d", i);
@@ -1940,30 +1966,30 @@ bool WinUI::MakeSnapshotMenu()
 }
 
 // ---------------------------------------------------------------------------
-//	ƒRƒ}ƒ“ƒhƒ‰ƒCƒ“‘–¸
+//	ã‚³ãƒãƒ³ãƒ‰ãƒ©ã‚¤ãƒ³èµ°æŸ»
 //
-//	‘®:
+//	æ›¸å¼:
 //	M88 [-flags] diskimagepath
 //
 //	-bN		basic mode (hex)
-//	-fA,B	flags (16i)	(A=flags‚Ì’†g, B=”½‰f‚³‚¹‚éƒrƒbƒg)
-//	-gA,B	flag2 (16i)	(A=flag2‚Ì’†g, B=”½‰f‚³‚¹‚éƒrƒbƒg)
-//	-cCLK	clock (MHz) (10i)
-//	-F		ƒtƒ‹ƒXƒNƒŠ[ƒ“‹N“®
+//	-fA,B	flags (16é€²)	(A=flagsã®ä¸­èº«, B=åæ˜ ã•ã›ã‚‹ãƒ“ãƒƒãƒˆ)
+//	-gA,B	flag2 (16é€²)	(A=flag2ã®ä¸­èº«, B=åæ˜ ã•ã›ã‚‹ãƒ“ãƒƒãƒˆ)
+//	-cCLK	clock (MHz) (10é€²)
+//	-F		ãƒ•ãƒ«ã‚¹ã‚¯ãƒªãƒ¼ãƒ³èµ·å‹•
 //
-//	N, A, B ‚Ì’l‚Í src/pc88/config.h ‚ğQÆD
+//	N, A, B ã®å€¤ã¯ src/pc88/config.h ã‚’å‚ç…§ï¼
 //	
-//	Œ»ƒo[ƒWƒ‡ƒ“‚Å‚Íİ’èƒ_ƒCƒAƒƒO‚Å‚Íİ’è‚Å‚«‚È‚¢‘g‚İ‡‚í‚¹‚à
-//	ó‚¯•t‚¯‚Ä‚µ‚Ü‚¤‚Ì‚Å—v’ˆÓ
-//	—á‚¦‚Îƒ}ƒEƒX‚ğg—p‚µ‚È‚ª‚çƒL[‚É‚æ‚éƒƒjƒ…[—}§‚È‚ñ‚©‚Íƒ„ƒoƒC‚©‚àD
+//	ç¾ãƒãƒ¼ã‚¸ãƒ§ãƒ³ã§ã¯è¨­å®šãƒ€ã‚¤ã‚¢ãƒ­ã‚°ã§ã¯è¨­å®šã§ããªã„çµ„ã¿åˆã‚ã›ã‚‚
+//	å—ã‘ä»˜ã‘ã¦ã—ã¾ã†ã®ã§è¦æ³¨æ„
+//	ä¾‹ãˆã°ãƒã‚¦ã‚¹ã‚’ä½¿ç”¨ã—ãªãŒã‚‰ã‚­ãƒ¼ã«ã‚ˆã‚‹ãƒ¡ãƒ‹ãƒ¥ãƒ¼æŠ‘åˆ¶ãªã‚“ã‹ã¯ãƒ¤ãƒã‚¤ã‹ã‚‚ï¼
 //
-//	—á:	M88 -b31 -c8 -f10,10 popfulmail.d88
-//		V2 ƒ‚[ƒhC8MHzCOPNA ƒ‚[ƒh‚Å popfulmail.d88 ‚ğ‹N“®‚·‚é
+//	ä¾‹:	M88 -b31 -c8 -f10,10 popfulmail.d88
+//		V2 ãƒ¢ãƒ¼ãƒ‰ï¼Œ8MHzï¼ŒOPNA ãƒ¢ãƒ¼ãƒ‰ã§ popfulmail.d88 ã‚’èµ·å‹•ã™ã‚‹
 //	
-//	à–¾‚ª•ª‚©‚è‚Ã‚ç‚¢‚Ì‚Í•S‚à³’m‚Å‚·(^^;
-//	Ú‚µ‚­‚Í‰º‚ğQÆ‚·‚é‚©CŠJ”­º‚É‚Å‚à¿–â‚µ‚Ä‚­‚¾‚³‚¢D
+//	èª¬æ˜ãŒåˆ†ã‹ã‚Šã¥ã‚‰ã„ã®ã¯ç™¾ã‚‚æ‰¿çŸ¥ã§ã™(^^;
+//	è©³ã—ãã¯ä¸‹ã‚’å‚ç…§ã™ã‚‹ã‹ï¼Œé–‹ç™ºå®¤ã«ã§ã‚‚è³ªå•ã—ã¦ãã ã•ã„ï¼
 //
-//	‘¼‚Ìƒpƒ‰ƒ[ƒ^‚à•ÏX‚Å‚«‚é‚æ‚¤‚É‚µ‚½‚¢ê‡‚àCˆêŒ¾’¸‚¯‚ê‚Î‘Î‰‚µ‚Ü‚·D
+//	ä»–ã®ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ã‚‚å¤‰æ›´ã§ãã‚‹ã‚ˆã†ã«ã—ãŸã„å ´åˆã‚‚ï¼Œä¸€è¨€é ‚ã‘ã‚Œã°å¯¾å¿œã—ã¾ã™ï¼
 //
 void WinUI::ApplyCommandLine(const char* cmdline)
 {
@@ -1981,7 +2007,7 @@ void WinUI::ApplyCommandLine(const char* cmdline)
 				char* endptr;
 				int32 newflags, activate;
 
-			// BASIC ƒ‚[ƒh‚ğİ’è  -bƒ‚[ƒh”Ô†
+			// BASIC ãƒ¢ãƒ¼ãƒ‰ã‚’è¨­å®š  -bãƒ¢ãƒ¼ãƒ‰ç•ªå·
 			case 'b':
 				config.basicmode =
 					Config::BASICMode(strtoul(cmdline, &endptr, 16));
@@ -1989,19 +2015,19 @@ void WinUI::ApplyCommandLine(const char* cmdline)
 				change = true;
 				break;
 
-			// clock ‚ğİ’è  -cƒNƒƒbƒN
+			// clock ã‚’è¨­å®š  -cã‚¯ãƒ­ãƒƒã‚¯
 			case 'c':
 				config.clock = Limit(strtoul(cmdline, &endptr, 10), 100, 1) * 10;
 				cmdline = endptr;
 				change = true;
 				break;
 
-			// ƒtƒ‹ƒXƒNƒŠ[ƒ“‹N“®
+			// ãƒ•ãƒ«ã‚¹ã‚¯ãƒªãƒ¼ãƒ³èµ·å‹•
 			case 'F':
 				fullscreen = true;
 				break;
 
-			// flags ‚Ì’l‚ğİ’è  -g’l,—LŒøƒrƒbƒg
+			// flags ã®å€¤ã‚’è¨­å®š  -gå€¤,æœ‰åŠ¹ãƒ“ãƒƒãƒˆ
 			case 'f':
 				newflags = strtoul(cmdline, &endptr, 16);
 				activate = ~0;
@@ -2014,7 +2040,7 @@ void WinUI::ApplyCommandLine(const char* cmdline)
 				change = true;
 				break;
 
-			// flag2 ‚Ì’l‚ğİ’è  -g’l,—LŒøƒrƒbƒg
+			// flag2 ã®å€¤ã‚’è¨­å®š  -gå€¤,æœ‰åŠ¹ãƒ“ãƒƒãƒˆ
 			case 'g':
 				newflags = strtoul(cmdline, &endptr, 16);
 				activate = ~0;
@@ -2033,7 +2059,7 @@ void WinUI::ApplyCommandLine(const char* cmdline)
 			continue;
 		}
 
-		// c‚è‚Í‘½•ªƒtƒ@ƒCƒ‹–¼
+		// æ®‹ã‚Šã¯å¤šåˆ†ãƒ•ã‚¡ã‚¤ãƒ«å
 		OpenDiskImage(cmdline);
 		break;
 	}

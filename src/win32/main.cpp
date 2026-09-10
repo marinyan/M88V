@@ -28,6 +28,7 @@ static void InitPathInfo()
 	_splitpath(buf, drive, dir, fname, ext); 
 	sprintf(m88ini, "%s%s%s.ini", drive, dir, fname);
 	sprintf(m88dir, "%s%s", drive, dir);
+	SetCurrentDirectory(m88dir);
 }
 
 // ---------------------------------------------------------------------------
