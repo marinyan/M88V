@@ -157,3 +157,9 @@ T88についてはオープンまでの試験であり、各モードでのMON/C
 
 BASIC文字入力は各押下・解放を既定6フレーム保持します。N88 V1で3フレームだと
 文字の取りこぼしがあったためです。必要なら`type_nbasic.ps1 -KeyFrames N`で調整します。
+
+## 2026-09-12 大容量BINの起動
+
+Rogue80の29,400バイトの直接BINに合わせ、GUI共通ローダーとheadlessの上限をFFF0Hへ拡張。小さいBINのEFF0HランチャーとF000Hスタックは維持し、大きいBINはFFF0H／FFFFHへ切り替える。V1H／V2の独立TVRAMにも起動コードを設置する。
+
+CTest 8件成功。ROMを使うbinary_loader_testではN802／N80V2／N／N88V1／N88V1H／N88V2について、両ローダー×末尾EFF0H・F100H・FFF0Hの36ケースを確認し、読み込んだ全データを起動コードや初期スタックが上書きしないこと、上限超過拒否を検査した。Win32 GUIをビルドしdist/windows-x64/m88v.exeへ反映した。Rogue80側でもFFF0H経由の起動・全コード一致・キー時刻のseed差と実テープ起動を確認した。

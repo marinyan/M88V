@@ -3,6 +3,7 @@
 #include "memory.h"
 #include "pc88/calender.h"
 #include "development/rom_overlay.h"
+#include "development/binary_loader.h"
 
 #include <algorithm>
 #include <cctype>
@@ -161,15 +162,14 @@ bool HeadlessMachine::LoadBinary(const std::string& path, uint16_t address, bool
         return false;
     }
     std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-    constexpr uint32_t launcherAddress = 0xeff0;
     if (bytes.empty()) {
         if (error) *error = "BIN is empty";
         return false;
     }
     const uint32_t end = static_cast<uint32_t>(address) + static_cast<uint32_t>(bytes.size());
-    const uint32_t limit = installLauncher ? launcherAddress : 0x10000u;
+    const uint32_t limit = installLauncher ? M88V::BinaryLoadLimit : 0x10000u;
     if (end > limit) {
-        if (error) *error = "BIN overlaps the EFF0H launcher or exceeds 64 KiB RAM";
+        if (error) *error = "BIN overlaps the FFF0H launcher or exceeds 64 KiB RAM";
         return false;
     }
 
@@ -177,13 +177,19 @@ bool HeadlessMachine::LoadBinary(const std::string& path, uint16_t address, bool
     debugger_.Clear();
     std::memcpy(ram + address, bytes.data(), bytes.size());
     if (installLauncher) {
-        // LD SP,F000 / CALL address / JP 0000. Matches the development-loader handoff notes.
+        const auto launcherAddress = M88V::BinaryLauncher(end);
+        const auto stack = M88V::BinaryStack(launcherAddress);
+        // LD SP,stack / CALL address / JP 0000; preserve the loaded image.
         const uint8_t launcher[] = {
-            0x31, 0x00, 0xf0,
+            0x31, uint8_t(stack), uint8_t(stack >> 8),
             0xcd, static_cast<uint8_t>(address & 0xff), static_cast<uint8_t>(address >> 8),
             0xc3, 0x00, 0x00,
         };
         std::memcpy(ram + launcherAddress, launcher, sizeof(launcher));
+        // V1H/V2 may map independent text RAM at F000H. Install the high
+        // launcher in that CPU-visible bank as well; the BIN remains in RAM.
+        if (GetMem1()->GetRdBank(launcherAddress) == PC8801::Memory::mTV)
+            std::memcpy(GetMem1()->GetTVRAM() + (launcherAddress & 0xfff), launcher, sizeof(launcher));
         GetCPU1()->SetPC(launcherAddress);
     } else {
         GetCPU1()->SetPC(address);

@@ -142,3 +142,5 @@ ctest --test-dir build/headless --output-on-failure
 - その他の第三者コードには、それぞれのファイルに記載された条件が適用されます。
 
 M88Vはcisc氏・Bubio氏による公式リリースではありません。
+
+大容量の開発用BINもGUI／headlessで直接起動できます。末尾がEFF0Hを超える場合はFFF0HのランチャーとFFFFHの初期スタックを使い、FFF0H未満へ収まるデータを受け付けます。小さいBINは従来のEFF0H／F000Hを維持します。BINは通常RAMへ読み込み、起動コードは必要なら独立TVRAMにも置きます。プログラムはまとまったスタックを使う前にSPを設定してください。
