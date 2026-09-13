@@ -1,136 +1,123 @@
 # M88V — V is for Vibe coding
 
-PC-8001 / PC-8801向けの開発支援エミュレータです。
-[cisc氏のM88](http://retropc.net/cisc/m88/)を元にした
-[bubio/M88M](https://github.com/bubio/M88M)から派生しています。
-Windowsの標準GUIは[rururutan/m88](https://github.com/rururutan/m88)の従来Win32版を基礎にし、
-M88Vの修正済みコア・開発APIと組み合わせています。
-自作ゲームの開発で追加した機能を、ゲームに依存しない専用プロジェクトへ分離しました。
-取り込み元のリビジョンと改変内容は[UPSTREAM.md](UPSTREAM.md)に記載しています。
+PC-8001 / PC-8801 向けの開発支援エミュレータです。
+Windows GUI での実行に加え、ローカル HTTP API からキー入力・画面取得・メモリ参照・実行計測を行えます。
+自作プログラムの動作確認や、入力と実行状態を再現するテストに使えます。
 
-## 開発機能
+## 主な機能
 
-- GUIでのBIN直接起動。起動時に機種・BASICモードを指定できます。
-- ウィンドウ不要のローカルHTTP API。要求したフレーム数だけ実行します。
-- キー入力、Z80レジスタ・物理RAM/TVRAM/GVRAMの参照。
-- PNG画面取得、同一時点のメモリダンプ、T88テープのオープン。
-- GUIとheadlessで共通の機種定義・ROM検査・一時的なROMファイル名の別名対応。
-- シンボル付きT-state計測、書き込み元追跡、ウォッチ停止、命令/レジスタ履歴。
-- 状態保存・復元と入力記録・再生、CPUの読み書き別メモリマップ。
+- **プログラムの実行**：BIN の直接ロード、起動時の機種・BASIC モード指定。
+- **テープ操作**：T88 の読み込み・空ファイル作成・巻き戻し・取り外し、CMT 出力の録音と T88／CMT 保存。
+- **自動操作**：画面を開かない headless 実行、指定フレーム数の実行、キー入力、PNG 取得。
+- **デバッグ**：Z80 レジスタ・RAM/TVRAM/GVRAM の参照、メモリダンプ、CPU の読み書き別メモリマップ。
+- **計測と再現**：T-state 計測、書き込み元追跡、ウォッチ停止、命令・レジスタ履歴、状態保存・復元、入力記録・再生。
 
-追加4機能の使用例・API・制限は[開発ツール](docs/DEVELOPMENT_TOOLS-ja.md)を参照してください。
-ゲーム固有のシナリオ・結果判定は各プロジェクトに置き、状態/入力の再現を共通化します。
+Windows の標準 GUI は Win32 版です。任意選択の raylib 版と headless 版も共通の CPU コアを使います。
+M88V の変更は Windows x64 で検証しています。他 OS での実行確認は未実施です。
 
-Windows GUIでは`Tape`メニューからT88の新規作成・巻き戻し・取り外しと、CMT出力のT88／CMT保存ができます。
-再生テープと録音バッファは独立しています。操作手順は[テープ操作](docs/TAPE-ja.md)を参照してください。
-raylib版は任意選択として残しており、CPUコアと開発機能は共通です。
-HTTP APIは`127.0.0.1`だけで待ち受け、起動ごとのトークン認証を必要とします。
-接続ファイルにはトークンがあるため、公開・コミットしないでください。
+## はじめる
 
-## 開発起動で指定できるモード
+**ROM は同梱していません。** 所有する実機から取得した ROM を用意してください。
+必要なファイルと対応モードは [機種・ROM・起動設定](docs/SETUP-ja.md) を参照してください。
+以下のコマンドはリポジトリのルートで実行します。
 
-| 指定値 | 対象 |
-| --- | --- |
-| `N802`（既定） | PC-8001mkII / N80 BASIC |
-| `N80V2` | PC-8001mkIISR / N80 BASIC Ver.1.2 |
-| `N` | PC-8801 / N-BASIC |
-| `N88V1` | PC-8801 / N88-BASIC V1S |
-| `N88V1H` | PC-8801 / N88-BASIC V1H |
-| `N88V2` | PC-8801 / N88-BASIC V2 |
+### Windows GUI を使う
 
-`N`はPC-8001mkIIモードではありません。曖昧な`N80`指定は受け付けません。
-PC-88VAのネイティブモードは対象外です。
-元のコアにはCD-ROM用の`N88V2CD`もありますが、この開発起動インターフェースの
-選択・検証対象には含めていません。
-
-## ROM
-
-ROMは同梱しません。所有する実機から取得したROMを、別のディレクトリに用意してください。
-ファイル名の大文字・小文字は区別せず、一時ディレクトリ内でのみ別名を作ります。
-元のROMは変更しません。
-
-- 全モードで`N88.ROM`または結合形式の`PC88.ROM`が必要です（元のコアの初期化用）。
-- フォントは`FONT.ROM`、`FONT80.ROM`、または`KANJI1.ROM`が必要です。
-- `N802`では`N80_2.ROM`を使います。代替名として`N80_11.ROM`、`N80_102.ROM`、
-  `N80_101.ROM`も認識します。この順で優先し、`-N80Rom`で明示指定できます。
-- `N80V2`では上記に加えて`N80_3.ROM`が必要です。
-- PC-88の分割ROM形式では、`N`に`N80.ROM`、N88系に`N88_0.ROM`～`N88_3.ROM`、
-  いずれも`DISK.ROM`が必要です。結合`PC88.ROM`使用時はこれらを内包します。
-- PC-88モードにはPC-80用の`N80_2.ROM`／`N80_3.ROM`は不要です。
-
-必要なROMの内容・版は対象機種に合わせてください。別名の認識だけで機種互換性が
-保証されるわけではありません。漢字・辞書・80SR専用フォント等は用途に応じて追加します。
-
-## Windowsでのビルドと起動
-
-C++デスクトップ開発環境を含むVisual Studio、CMake、PowerShell 7を使用します。
-この環境での専用ビルドスクリプトはMSVC＋Ninjaを利用します。
+ビルド済みの [m88v.exe](dist/windows-x64/m88v.exe) を収録しています。
+PowerShell で ROM の場所とモードを指定して起動できます。
 
 ```powershell
-.\scripts\build_headless.ps1
-.\scripts\build_gui.ps1
+$env:M88V_ROM_DIR = 'D:\path\to\roms'
+$env:M88V_BASIC_MODE = 'N88V2'
+.\dist\windows-x64\m88v.exe
+```
 
-# PC-88 V2。PC-80 mkIIなら -BasicMode N802
+PC-8001mkII なら `N802`、PC-8001mkIISR なら `N80V2` を指定します。
+設定は EXE と同じ場所の `m88v.ini` に保存されます。
+T88 の操作と録音の保存は `Tape` メニューから行います。再生テープと録音バッファは独立しています。
+詳しくは [テープ操作](docs/TAPE-ja.md) を参照してください。
+
+### 自作 BIN を GUI で起動する
+
+PowerShell 7 で、プログラムに合った機種とロード先を指定します。
+
+```powershell
+.\scripts\start_gui_game.ps1 -RomDirectory D:\path\to\roms `
+    -BasicMode N88V2 -Bin D:\path\to\program.bin -Address 0xB000
+```
+
+BIN は物理主 RAM へ読み込みます。バンク切替は行わないため、対象に合う ROM/RAM マッピングが必要です。
+ロード範囲・起動用ランチャ・スタックの詳細は [BIN 直接ロード](docs/HEADLESS_API-ja.md#bin直接ロード) を参照してください。
+
+### API で操作する
+
+headless 版を [ビルド](#ビルドと検証) してから、PowerShell 7 で起動します。
+
+```powershell
 .\scripts\start_headless.ps1 -RomDirectory D:\path\to\roms -BasicMode N88V2
 .\scripts\m88ctl.ps1 run -Frames 180
 .\scripts\type_nbasic.ps1 -Line ''
 .\scripts\type_nbasic.ps1 -Line 'PRINT "M88V"'
 .\scripts\m88ctl.ps1 capture -Output build\frame.png
 .\scripts\m88ctl.ps1 shutdown
-
-# GUIで自作BINを起動（ロード先とBINはプログラムに合わせる）
-.\scripts\start_gui_game.ps1 -RomDirectory D:\path\to\roms `
-    -BasicMode N88V2 -Bin D:\path\to\program.bin -Address 0xB000
 ```
 
-`dist/windows-x64/m88v.exe`にWindows GUIビルドを収録しています。
-Windows GUIの実行ファイル名は`m88m.exe`から`m88v.exe`へ変更しました。
-既存のショートカットや外部スクリプトでは参照先を更新してください。
-Win32版の設定はEXEと同じ場所の`m88v.ini`です。旧`M88.ini`やraylib版の
-`%APPDATA%/M88M/config.bin`とは共有せず、自動上書きもしません。
-CMakeの`M88M_*`オプション名は互換性のため維持します。
-GUIを直接起動する場合は既存の設定モードを保持し、BINの指定だけでN802に変更しません。
-`M88V_BASIC_MODE`を指定すると上の6モードから選べます。
+エミュレーション時間は要求した分だけ進みます。HTTP API は `127.0.0.1` で待ち受け、
+起動ごとのトークン認証が必要です。接続ファイルにはトークンが含まれるため、公開・コミットしないでください。
+エンドポイントと操作例は [ローカル API](docs/HEADLESS_API-ja.md) にまとめています。
 
-環境変数の正式名は`M88V_ROM_DIR`（GUI/headless共通）、`M88V_LOAD_BIN`と
-`M88V_LOAD_ADDRESS`（GUIのBIN直接起動）です。旧`M88M_ROM_DIR`、`M88M_LOAD_BIN`、
-`M88M_LOAD_ADDRESS`も互換用に受け付けます。両方ある場合は空でない`M88V_*`を優先し、
-新名が未設定または空なら旧名を参照します。headlessの`--rom-dir`は環境変数より優先します。
+## ドキュメント
 
-Win32版は環境変数、INIの`BIOSPath`、EXEの隣の`roms`、`rom`、EXEと同じ場所のROM、
-従来の`%APPDATA%/M88M/roms`の順で参照先を選びます。
-詳細・raylib版のビルド・移行範囲は[Windows GUIの構成](docs/NATIVE_WINDOWS-ja.md)を参照してください。
+| 調べたいこと | 資料 |
+| --- | --- |
+| 対応する機種・BASIC モード、必要な ROM、環境変数 | [機種・ROM・起動設定](docs/SETUP-ja.md) |
+| T88 の作成・再生、CMT 出力の保存 | [テープ操作](docs/TAPE-ja.md) |
+| API、BIN ロード、キー入力、画面・メモリ取得 | [ローカル API](docs/HEADLESS_API-ja.md) |
+| 計測、ウォッチ、状態保存、入力記録・再生 | [開発ツール](docs/DEVELOPMENT_TOOLS-ja.md) |
+| Windows GUI の構成、設定、raylib 版のビルド | [Windows GUI](docs/NATIVE_WINDOWS-ja.md) |
+| 実施済みの検証と未確認項目 | [検証範囲と結果](docs/VALIDATION-ja.md) |
+| 派生元のリビジョンと改変内容 | [取り込み元と変更履歴](UPSTREAM.md) |
 
-BIN直接ロードは物理主RAMへの書き込みで、バンク切替は行いません。
-`EFF0H`のランチャと`F000H`から下向きのスタックを使います。
-対象プログラムに合うROM/RAMマッピングが必要です。
-詳細は[ローカルAPI](docs/HEADLESS_API-ja.md)を参照してください。
+## ビルドと検証
 
-## 検証
+Windows では C++ デスクトップ開発環境を含む Visual Studio、Windows SDK、CMake、Ninja、PowerShell 7 を使います。
 
 ```powershell
-# ROM不要のCTest（Windowsは8件）は build_headless.ps1 でも実行
+.\scripts\build_gui.ps1
+.\scripts\build_headless.ps1
+```
+
+GUI のビルドは `dist/windows-x64/m88v.exe` を更新します。
+headless のビルドスクリプトは ROM 不要の CTest も実行します。
+
+```powershell
+# ビルド後にテストだけ実行
 ctest --test-dir build/headless-msvc --output-on-failure
 
-# 手元のROMを使用する6モードの統合テスト
+# 手元の ROM を使用する統合テスト
 .\scripts\test_development_modes.ps1 -RomDirectory D:\path\to\roms
 .\scripts\test_debug_tools.ps1 -RomDirectory D:\path\to\roms
 .\scripts\test_checkpoints.ps1 -RomDirectory D:\path\to\roms
 ```
 
-[検証範囲と結果](docs/VALIDATION-ja.md)を参照してください。
-実機と同一のタイミング・全ソフトの互換性を保証するものではありません。
-最終確認は対象実機でも行ってください。
-
-M88M由来のmacOS/Linux/FreeBSD/Haiku向けCMake設定・ビルドスクリプトも保持しています。
-今回のM88V変更はWindows x64で検証しました。他OSでの実行確認は未実施です。
-GUIを使わないビルドは次のとおりです。
+M88M 由来の macOS / Linux / FreeBSD / Haiku 向けビルド設定も保持しています。
+GUI を使わない CMake ビルドは次のとおりです。
 
 ```sh
 cmake -S . -B build/headless -DM88M_BUILD_GUI=OFF -DBUILD_TESTING=ON
 cmake --build build/headless --parallel
 ctest --test-dir build/headless --output-on-failure
 ```
+
+検証の範囲は [検証記録](docs/VALIDATION-ja.md) を参照してください。
+実機と同一のタイミングや全ソフトの互換性を保証するものではありません。最終確認は対象実機でも行ってください。
+
+## 派生元
+
+[cisc 氏の M88](http://retropc.net/cisc/m88/) を元にした [bubio/M88M](https://github.com/bubio/M88M) から派生しています。
+Windows GUI は [rururutan/m88](https://github.com/rururutan/m88) の従来 Win32 版を基礎に、M88V の修正済みコア・開発 API と組み合わせています。
+自作ゲームの開発で追加した機能を、ゲームに依存しない専用プロジェクトへ分離しました。
+取り込み元のリビジョンと改変内容は [UPSTREAM.md](UPSTREAM.md) に記載しています。
 
 ## ライセンス
 
@@ -143,5 +130,3 @@ ctest --test-dir build/headless --output-on-failure
 - その他の第三者コードには、それぞれのファイルに記載された条件が適用されます。
 
 M88Vはcisc氏・Bubio氏による公式リリースではありません。
-
-大容量の開発用BINもGUI／headlessで直接起動できます。末尾がEFF0Hを超える場合はFFF0HのランチャーとFFFFHの初期スタックを使い、FFF0H未満へ収まるデータを受け付けます。小さいBINは従来のEFF0H／F000Hを維持します。BINは通常RAMへ読み込み、起動コードは必要なら独立TVRAMにも置きます。プログラムはまとまったスタックを使う前にSPを設定してください。
