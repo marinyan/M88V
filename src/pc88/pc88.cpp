@@ -254,6 +254,9 @@ void PC88::UpdateScreen(bool refresh)
 //
 void PC88::Reset()
 {
+    // Finish cassette output before resetting the scheduler time base.
+    tapemgr->Motor(false);
+    tapemgr->SetSerial(false, 0xcc);
 	Scheduler::Init();
 	dexc = 0;
 	updated = false;
@@ -514,6 +517,7 @@ bool PC88::ConnectDevices(const char* romDir)
 	siotape = new PC8801::SIO(DEV_ID('S', 'I', 'O', ' '));
 	if (!siotape || !bus1.Connect(siotape, c_sio)) return false;
 	if (!siotape->Init(&bus1, pint0, psioreq)) return false;
+	siotape->SetTapeOutput(tapemgr);
 
 	static const IOBus::Connector c_tape[] =
 	{

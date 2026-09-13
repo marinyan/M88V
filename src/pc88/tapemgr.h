@@ -11,6 +11,7 @@
 #include "psg.h"
 #include "soundbuf.h"
 #include "schedule.h"
+#include <vector>
 
 // ---------------------------------------------------------------------------
 //
@@ -33,6 +34,14 @@ public:
 	bool Open(const char* file);
 	bool Close();
 	bool Rewind(bool timer = true);
+    bool SeekEnd();
+    static bool CreateEmpty(const char* file);
+    bool SaveRecording(const char* file, bool cmt = false);
+    void ClearRecording();
+    bool HasRecording() const { return !recorded.empty(); }
+    bool RecordingDirty() const { return recordingDirty; }
+    void SetSerial(bool enabled, uint type);
+    void WriteByte(uint byte);
 
 	bool IsOpen() { return !!tags; }
 
@@ -128,6 +137,17 @@ private:
 	int datatype;
 
 private:
+    struct RecordedTag {
+        uint16 id, type;
+        uint32 tick;
+        std::vector<uint8> bytes;
+    };
+    std::vector<RecordedTag> recorded;
+    uint outputControl = 0, serialType = 0xcc, recordTime = 0, recordDataTicks = 0;
+    bool transmit = false, recordingDirty = false;
+    void FlushCarrier();
+    bool OutputActive() const { return motor && transmit && !(outputControl & 0x20); }
+    static bool WriteImage(const char* file, const std::vector<RecordedTag>& tags, bool cmt);
 	static const Descriptor descriptor;
 	static const InFuncPtr  indef[];
 	static const OutFuncPtr outdef[];

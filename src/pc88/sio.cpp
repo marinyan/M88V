@@ -9,6 +9,7 @@
 #include "headers.h"
 #include "schedule.h"
 #include "sio.h"
+#include "tapemgr.h"
 
 #define LOGNAME "sio"
 #include "diag.h"
@@ -43,6 +44,9 @@ bool SIO::Init(IOBus* _bus, uint _prxrdy, uint _preq)
 //
 void SIO::Reset(uint, uint)
 {
+	rxen = txen = false;
+	datalen = 8; parity = none; stop = 3; data = 0; clock = 1200; outputType = 0xcc;
+	if (tapeOutput) tapeOutput->SetSerial(false, outputType);
 	mode = clear;
 	status = TXRDY | TXE;
 	baseclock = 1200 * 64;
@@ -58,6 +62,7 @@ void IOCALL SIO::SetControl(uint, uint d)
 	switch (mode)
 	{
 	case clear:
+		outputType = d & (d & 0x10 ? 0xfc : 0xdc);
 		// Mode Instruction
 		if (d & 3)
 		{
@@ -100,7 +105,8 @@ void IOCALL SIO::SetControl(uint, uint d)
 		{
 			// Reset!
 			LOG0(" Internal Reset!\n");
-			mode = clear;
+			mode = clear; rxen = txen = false;
+			if (tapeOutput) tapeOutput->SetSerial(false, outputType);
 			break;
 		}
 		// b5 - request to send
@@ -120,6 +126,7 @@ void IOCALL SIO::SetControl(uint, uint d)
 		// b1 - data terminal ready
 		// b0 - send enable
 		txen = (d & 1) != 0;
+		if (tapeOutput) tapeOutput->SetSerial(txen, outputType);
 
 		LOG2(" RxE:%d TxE:%d\n", rxen, txen);
 		break;
@@ -135,6 +142,7 @@ void IOCALL SIO::SetControl(uint, uint d)
 void IOCALL SIO::SetData(uint, uint d)
 {
 	LOG1("<%.2x ", d);
+	if (txen && tapeOutput) tapeOutput->WriteByte(d & ((1u << datalen) - 1));
 }
 
 // ---------------------------------------------------------------------------
@@ -195,6 +203,7 @@ bool IFCALL SIO::SaveStatus(uint8* s)
 {
 	Status* status = (Status*) s;
 	status->rev			= ssrev;
+	status->rxen = rxen; status->txen = txen; status->status = this->status;
 	status->baseclock	= baseclock;
 	status->clock		= clock;
 	status->datalen		= datalen;
@@ -210,6 +219,7 @@ bool IFCALL SIO::LoadStatus(const uint8* s)
 	const Status* status = (const Status*) s;
 	if (status->rev != ssrev)
 		return false;
+	rxen = status->rxen; txen = status->txen; this->status = status->status;
 	baseclock	= status->baseclock;
 	clock		= status->clock;
 	datalen		= status->datalen;
@@ -217,6 +227,8 @@ bool IFCALL SIO::LoadStatus(const uint8* s)
 	data		= status->data;
 	mode		= status->mode;
 	parity		= status->parity;
+	if (datalen < 5 || datalen > 8 || stop > 3) return false;
+	outputType = (stop << 6) | ((datalen - 5) << 2) | (parity == none ? 0 : parity == even ? 0x30 : 0x10);
 	return true;
 }
 

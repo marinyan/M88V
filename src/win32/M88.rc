@@ -85,6 +85,13 @@ BEGIN
     POPUP "Ta&pe"
     BEGIN
         MENUITEM "&Open...",                    IDM_TAPE
+        MENUITEM "&New empty T88...",            IDM_TAPE_NEW
+        MENUITEM "&Rewind",                     IDM_TAPE_REWIND
+        MENUITEM "Go to &end",                  IDM_TAPE_END
+        MENUITEM "E&ject",                      IDM_TAPE_EJECT
+        MENUITEM SEPARATOR
+        MENUITEM "&Save recording as...",        IDM_TAPE_SAVE
+        MENUITEM "&Clear recording...",          IDM_TAPE_CLEAR
     END
     POPUP "&Tools"
     BEGIN

@@ -127,6 +127,7 @@ void Snapshot::Runtime(PC88& p,StateCodec& c) {
     auto& t=*p.tapemgr;
     FIELD(t,tick);FIELD(t,mode);FIELD(t,time);FIELD(t,timercount);FIELD(t,timerremain);
     FIELD(t,motor);FIELD(t,datasize);FIELD(t,datatype);
+    FIELD(t,outputControl);FIELD(t,serialType);FIELD(t,transmit);FIELD(t,recordTime);FIELD(t,recordDataTicks);
     // The portable core caches the opcode page and its wait value. They can
     // legitimately lag behind VRTC wait-table changes until the next SetPC.
     for(auto cpu:{&p.cpu1,&p.cpu2}) {
@@ -175,8 +176,8 @@ void CheckDevicePayload(DeviceList& devices,const std::vector<uint8_t>& bytes) {
 bool Snapshot::Capture(PC88& p,const PC8801::Config& cfg,uint32_t rom,
         const std::vector<uint8_t>& frontend,std::vector<uint8_t>& output,std::string& error) {
     try {
-        if(p.diskmgr->GetCurrentDisk(0)>=0||p.diskmgr->GetCurrentDisk(1)>=0||p.tapemgr->IsOpen())
-            throw std::runtime_error("Development checkpoints require unmounted disks and a closed tape (external media are not rolled back)");
+        if(p.diskmgr->GetCurrentDisk(0)>=0||p.diskmgr->GetCurrentDisk(1)>=0||p.tapemgr->IsOpen()||p.tapemgr->HasRecording()||p.tapemgr->OutputActive())
+            throw std::runtime_error("Development checkpoints require unmounted disks and a closed tape with cleared, inactive cassette output (external media are not rolled back)");
         std::vector<uint8_t> devices(p.devlist.GetStatusSize());
         if(!p.devlist.SaveStatus(devices.data()))throw std::runtime_error("Device state capture failed");
         std::vector<uint8_t> runtime;StateCodec codec(runtime,false);Runtime(p,codec);

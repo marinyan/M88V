@@ -694,6 +694,13 @@ LRESULT WinUI::WmCommand(HWND hwnd, WPARAM wparam, LPARAM lparam)
 		regmon.Show(hinst, hwnd, !regmon.IsOpen());
 		break;
 
+    case IDM_TAPE_NEW: case IDM_TAPE_SAVE: case IDM_TAPE_REWIND:
+    case IDM_TAPE_END: case IDM_TAPE_EJECT: case IDM_TAPE_CLEAR:
+        SetGUIFlag(true);
+        TapeCommand(wid);
+        SetGUIFlag(false);
+        snapshotchanged = true;
+        break;
 	case IDM_TAPE:
 		ChangeTapeImage();
 		break;
@@ -803,6 +810,14 @@ LRESULT WinUI::WmDestroy(HWND hwnd, WPARAM wparam, LPARAM lparam)
 //
 LRESULT WinUI::WmClose(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
+    if (tapemgr && tapemgr->RecordingDirty()) {
+        SetGUIFlag(true);
+        int result = MessageBox(hwnd, "Cassette output has not been saved. Save before exiting?", "Tape", MB_YESNOCANCEL | MB_ICONQUESTION);
+        if (result == IDYES) TapeCommand(IDM_TAPE_SAVE);
+        bool cancel = result == IDCANCEL || (result == IDYES && tapemgr->RecordingDirty());
+        SetGUIFlag(false);
+        if (cancel) return 0;
+    }
 	// 確認
 	if (config.flags & Config::askbeforereset)
 	{
@@ -1102,7 +1117,7 @@ void WinUI::ChangeDiskImage(HWND hwnd, int drive)
 					  "All Files (*.*)\0*.*\0";
 	ofn.lpstrFile = filename;
 	ofn.nMaxFile = MAX_PATH;
-	ofn.Flags = OFN_CREATEPROMPT | OFN_SHAREAWARE;
+	ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
 	ofn.lpstrDefExt = "d88";
 	ofn.lpstrTitle = "Open disk image";
 	
@@ -1324,8 +1339,6 @@ void WinUI::ChangeTapeImage()
 	
 	SetGUIFlag(true);
 	
-	tapemgr->Close();
-
 	OFNV5 ofn;
 	memset(&ofn, 0, sizeof(ofn));
 	ofn.lStructSize = WINVAR(OFNSIZE);
@@ -1339,7 +1352,7 @@ void WinUI::ChangeTapeImage()
 					  "All Files (*.*)\0*.*\0";
 	ofn.lpstrFile = filename;
 	ofn.nMaxFile = MAX_PATH;
-	ofn.Flags = OFN_CREATEPROMPT | OFN_SHAREAWARE;
+	ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
 	ofn.lpstrDefExt = "t88";
 	ofn.lpstrTitle = "Open tape image";
 	
@@ -1353,6 +1366,45 @@ void WinUI::ChangeTapeImage()
 	SetGUIFlag(false);
 	SetThreadPriority(hthread, prev);
 	snapshotchanged = true;
+}
+
+void WinUI::TapeCommand(uint command)
+{
+    if (command == IDM_TAPE_REWIND) { tapemgr->Rewind(); return; }
+    if (command == IDM_TAPE_END) { tapemgr->SeekEnd(); return; }
+    if (command == IDM_TAPE_EJECT) {
+        tapemgr->Close(); tapetitle[0] = 0;
+        ModifyMenu(GetMenu(hwnd), IDM_TAPE, MF_BYCOMMAND | MF_STRING, IDM_TAPE, "&Open...");
+        return;
+    }
+    if (command == IDM_TAPE_CLEAR) {
+        if (MessageBox(hwnd, "Clear all recorded tape data?", "Tape", MB_YESNO | MB_ICONQUESTION) == IDYES)
+            tapemgr->ClearRecording();
+        return;
+    }
+    OFNV5 ofn = {};
+    char filename[MAX_PATH] = {};
+    ofn.lStructSize = WINVAR(OFNSIZE);
+    ofn.hwndOwner = hwnd;
+    ofn.lpstrFilter = command == IDM_TAPE_NEW ? "T88 image (*.t88)\0*.t88\0" :
+        "T88 image (*.t88)\0*.t88\0CMT byte stream (*.cmt)\0*.cmt\0";
+    ofn.lpstrFile = filename; ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrDefExt = command == IDM_TAPE_NEW ? "t88" : nullptr;
+    ofn.lpstrTitle = command == IDM_TAPE_NEW ? "Create empty T88" : "Save recorded cassette output";
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    (*EnableIME)(hwnd, true);
+    bool chosen = !!GetSaveFileName(&ofn);
+    (*EnableIME)(hwnd, false);
+    if (!chosen) return;
+    if (!strrchr(filename + ofn.nFileOffset, '.')) {
+        if (strlen(filename) + 4 >= MAX_PATH) return;
+        strcat(filename, command != IDM_TAPE_NEW && ofn.nFilterIndex == 2 ? ".cmt" : ".t88");
+    }
+    const char* ext = strrchr(filename, '.');
+    bool cmt = ext && strcmpi(ext, ".cmt") == 0;
+    bool ok = command == IDM_TAPE_NEW ? TapeManager::CreateEmpty(filename) : tapemgr->SaveRecording(filename, cmt);
+    if (!ok) MessageBox(hwnd, "Cannot write tape image. Recorded data is retained.", "Tape", MB_OK | MB_ICONERROR);
+    else if (command == IDM_TAPE_NEW) OpenTapeImage(filename);
 }
 
 void WinUI::OpenTapeImage(const char* filename)
@@ -1372,7 +1424,8 @@ void WinUI::OpenTapeImage(const char* filename)
 	}
 	else
 	{
-		mii.dwTypeData = "&Open...";
+		MessageBox(hwnd, "Cannot open this T88 image. The current tape is unchanged.", "Tape", MB_OK | MB_ICONERROR);
+		return;
 	}
 	SetMenuItemInfo(GetMenu(hwnd), IDM_TAPE, false, &mii);
 }
