@@ -163,3 +163,10 @@ BASIC文字入力は各押下・解放を既定6フレーム保持します。N8
 Rogue80の29,400バイトの直接BINに合わせ、GUI共通ローダーとheadlessの上限をFFF0Hへ拡張。小さいBINのEFF0HランチャーとF000Hスタックは維持し、大きいBINはFFF0H／FFFFHへ切り替える。V1H／V2の独立TVRAMにも起動コードを設置する。
 
 CTest 8件成功。ROMを使うbinary_loader_testではN802／N80V2／N／N88V1／N88V1H／N88V2について、両ローダー×末尾EFF0H・F100H・FFF0Hの36ケースを確認し、読み込んだ全データを起動コードや初期スタックが上書きしないこと、上限超過拒否を検査した。Win32 GUIをビルドしdist/windows-x64/m88v.exeへ反映した。Rogue80側でもFFF0H経由の起動・全コード一致・キー時刻のseed差と実テープ起動を確認した。
+
+## 2026-09-13: SHIFT＋テンキー
+
+- Win32 GUIを再ビルドし、配布用dist/windows-x64/m88v.exeを更新。
+- native_keyboard_test: N802・N80V2・N88V2、AT106・AT101、左右SHIFT、テンキー0～9、NumLock変換の有無（240通り）の入力列を検査。偽SHIFT解除・復元を挟んでも物理SHIFTだけを反映し、数字キーの別名での解放も確認。
+- 左右同時押し、片側の解放、チェックポイント復元、フォーカス復帰、PrintScreen接頭辞、独立右矢印、Raw Input無効時の従来処理もPASS。
+- この検証はネイティブ入力クラスへのイベント列注入。実キーボードからのNumLock ON＋SHIFT＋テンキー操作は、更新したGUIでユーザーによる再確認が必要。

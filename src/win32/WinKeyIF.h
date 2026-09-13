@@ -41,6 +41,8 @@ public:
 	void Disable(bool);
 	void KeyDown(uint, uint32);
 	void KeyUp(uint, uint32);
+	void EnableRawShift(bool enabled);
+	void RawKeyboard(const RAWKEYBOARD& key);
 	std::vector<uint8_t> CaptureDevelopmentState() const;
 	void RestoreDevelopmentState(const std::vector<uint8_t>& state);
 
@@ -75,6 +77,7 @@ private:
 	bool disable;
 	bool usearrow;
 	bool pc80mode;
+	bool rawshift = false;
 	HWND hwnd;
 	HANDLE hevent;
 	uint basicmode;

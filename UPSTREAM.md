@@ -32,6 +32,9 @@ not an official release from either upstream author.
 
 ## M88V changes
 
+- Native Windows SHIFT uses physical Raw Input scan codes, ignoring NumLock
+  override fake releases/restores while retaining legacy keypad and UI handling.
+
 - Native Windows GUI as the default: traditional menus, Tape/Open, configuration,
   keyboard and display backends from rururutan/m88. The same `m88core` and
   `m88_development` libraries serve Win32, optional raylib, and headless.

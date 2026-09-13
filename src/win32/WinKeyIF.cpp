@@ -71,6 +71,11 @@ bool WinKeyIF::Init(HWND hwndmsg)
 	hwnd = hwndmsg;
 	hevent = CreateEvent(0, 0, 0, 0);
 	keytable = KeyTable106[0];
+	if (hwnd) {
+		// Keep legacy messages for normal keys and UI shortcuts.
+		RAWINPUTDEVICE device{1, 6, 0, hwnd};
+		EnableRawShift(RegisterRawInputDevices(&device, 1, sizeof(device)) != FALSE);
+	}
 	return hevent != 0;
 }
 
@@ -112,6 +117,7 @@ void WinKeyIF::ApplyConfig(const Config* config)
 //
 void WinKeyIF::KeyDown(uint vkcode, uint32 keydata)
 {
+	if (rawshift && (vkcode == VK_SHIFT || vkcode == VK_LSHIFT || vkcode == VK_RSHIFT)) return;
 	if (keytable == KeyTable106[0])
 	{
 		// 半角・全角キー対策
@@ -131,6 +137,7 @@ void WinKeyIF::KeyDown(uint vkcode, uint32 keydata)
 //
 void WinKeyIF::KeyUp(uint vkcode, uint32 keydata)
 {
+	if (rawshift && (vkcode == VK_SHIFT || vkcode == VK_LSHIFT || vkcode == VK_RSHIFT)) return;
 	uint keyindex = (vkcode & 0xff) | (keydata & (1<<24) ? 0x100 : 0);
 	keystate[keyindex] = 0;
 	LOG2("KeyUp   = %.2x %.3x\n", vkcode, keyindex);
@@ -264,6 +271,28 @@ void IOCALL WinKeyIF::VSync(uint,uint d)
 			keyport[i] = -1;
 		}
 	}
+}
+
+void WinKeyIF::EnableRawShift(bool enabled)
+{
+	rawshift = enabled;
+	keystate[VK_SHIFT] = keystate[VK_SHIFT | 0x100] = 0;
+	keystate[VK_LSHIFT] = keystate[VK_RSHIFT] = 0;
+}
+
+void WinKeyIF::RawKeyboard(const RAWKEYBOARD& key)
+{
+	if (!rawshift || !active || key.VKey >= 255 ||
+	    (key.Flags & (RI_KEY_E0 | RI_KEY_E1))) return;
+	if (key.VKey != VK_SHIFT && key.VKey != VK_LSHIFT && key.VKey != VK_RSHIFT) return;
+	// NumLock override emits fake SHIFT events with the keypad's scan code.
+	// Only physical left/right SHIFT scan codes may change the matrix.
+	uint side;
+	if (key.MakeCode == 0x2a) side = VK_LSHIFT;
+	else if (key.MakeCode == 0x36) side = VK_RSHIFT;
+	else return;
+	keystate[side] = (key.Flags & RI_KEY_BREAK) ? 0 : 1;
+	keystate[VK_SHIFT] = keystate[VK_LSHIFT] | keystate[VK_RSHIFT];
 }
 
 void WinKeyIF::Activate(bool yes)

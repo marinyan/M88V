@@ -352,6 +352,7 @@ LRESULT WinUI::WinProc(HWND hwnd, UINT umsg, WPARAM wp, LPARAM lp)
 
 	switch (umsg)
 	{
+	PROC_MSG(WM_INPUT, WmInput);
 	PROC_MSG(WM_COMMAND,			WmCommand);
 	PROC_MSG(WM_PAINT,				WmPaint);
 	PROC_MSG(WM_CREATE,				WmCreate);
@@ -423,6 +424,19 @@ inline LRESULT WinUI::M88SendKeyState(HWND hwnd, WPARAM wparam, LPARAM lparam)
 	GetKeyboardState(dest);
 	SetEvent((HANDLE) lparam);
 	return 0;
+}
+
+LRESULT WinUI::WmInput(HWND hwnd, WPARAM wparam, LPARAM lparam)
+{
+	RAWINPUT input{};
+	UINT size = sizeof(input);
+	const UINT read = GetRawInputData(reinterpret_cast<HRAWINPUT>(lparam),
+		RID_INPUT, &input, &size, sizeof(RAWINPUTHEADER));
+	if (read != UINT(-1) && read >= sizeof(RAWINPUTHEADER) + sizeof(RAWKEYBOARD) &&
+	    input.header.dwType == RIM_TYPEKEYBOARD)
+		keyif.RawKeyboard(input.data.keyboard);
+	// Foreground WM_INPUT requires DefWindowProc for system cleanup.
+	return DefWindowProc(hwnd, WM_INPUT, wparam, lparam);
 }
 
 inline LRESULT WinUI::WmKeyDown(HWND hwnd, WPARAM wparam, LPARAM lparam)
