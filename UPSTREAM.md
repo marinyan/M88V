@@ -76,3 +76,10 @@ Preserve all original notices, publish the required source alongside modified
 distributions, and retain the modification/provenance documentation. The bundled
 font notices and SIL OFL are in [assets/NOTICE.md](assets/NOTICE.md) and
 [assets/OFL.txt](assets/OFL.txt). ROM data must not be redistributed with M88V.
+
+## CMT・テープ操作の追加参考
+
+X88000 1.5.3（Manuke、2018-08-10）の作者公開ソースを参照し、M88V の USART 送信、独立した録音バッファ、T88/CMT 保存とテープ操作を追加。
+参照元: https://quagma.sakura.ne.jp/manuke/x88src.html （作者による PDS 宣言あり）。
+参照ファイル: `TapeImage.h/.cpp`、`PC88Usart.h`、`PC88Z80Main.cpp`、`X88TapeImageDlg.cpp`。
+既存の M88 コアのライセンスを維持し、M88V の追加部分は BSD-2-Clause。

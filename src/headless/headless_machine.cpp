@@ -202,7 +202,6 @@ bool HeadlessMachine::OpenTape(const std::string& path, std::string* error) {
         if (error) *error = "machine is not initialized";
         return false;
     }
-    tapeManager_.Close();
     const std::string absolute = fs::absolute(fs::u8path(path)).string();
     if (!tapeManager_.Open(absolute.c_str())) {
         if (error) *error = "cannot open T88 tape: " + path;

@@ -72,6 +72,7 @@ private:
 	bool CreateDiskMenu(uint drive);
 
 	void ChangeTapeImage();
+	void TapeCommand(uint command);
 	void OpenTapeImage(const char* filename);
 
 	void ShowStatusWindow();

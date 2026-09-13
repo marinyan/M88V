@@ -9,6 +9,9 @@
 #include "file.h"
 #include "status.h"
 #include "misc.h"
+#include <fstream>
+#include <filesystem>
+#include <limits>
 
 
 #define LOGNAME	"tape"
@@ -29,6 +32,7 @@ TapeManager::TapeManager()
 	bus = 0;
 	offset = 0;
 	mode = T_BLANK;
+	data = nullptr; tick = time = timercount = timerremain = 0;
 	motor = false;
 }
 
@@ -61,44 +65,42 @@ bool TapeManager::Init(Scheduler* s, IOBus* b, int pi)
 //
 bool TapeManager::Open(const char* file)
 {
-	Close();
-
-	FileIO fio;
-	if (!fio.Open(file, FileIO::readonly))
-		return false;
-
-	// ヘッダ確認
-	char buf[24];
-	fio.Read(buf, 24);
-	if (memcmp(buf, T88ID, 24))
-		return false;
-
-	// タグのリスト構造を展開
-	Tag* prv = 0;
-	do
-	{
-		TagHdr hdr;
-		fio.Read(&hdr, 4);
-		
-		Tag* tag = (Tag*) new uchar[sizeof(Tag)-1+hdr.length];
-		if (!tag)
-		{
-			Close();
-			return false;
-		}
-		
-		tag->prev = prv;
-		tag->next = 0;
-		(prv ? prv->next : tags) = tag;
-		tag->id = hdr.id;
-		tag->length = hdr.length;
-		fio.Read(tag->data, tag->length);
-		prv = tag;
-	} while (prv->id);
-
-	if (!Rewind())
-		return false;
-	return true;
+    // Parse into a temporary image: failed opens must leave playback intact.
+    TapeManager candidate;
+    FileIO fio;
+    if (!fio.Open(file, FileIO::readonly)) return false;
+    char buf[24];
+    if (fio.Read(buf, 24) != 24 || memcmp(buf, T88ID, 24)) return false;
+    Tag* previous = nullptr;
+    size_t total = 0;
+    for (;;) {
+        TagHdr hdr;
+        if (fio.Read(&hdr, 4) != 4) return false;
+        total += 4 + hdr.length;
+        if (total > 64 * 1024 * 1024) return false;
+        Tag* tag = (Tag*)new uchar[sizeof(Tag) + hdr.length];
+        tag->prev = previous; tag->next = nullptr;
+        tag->id = hdr.id; tag->length = hdr.length;
+        (previous ? previous->next : candidate.tags) = tag;
+        previous = tag;
+        if (fio.Read(tag->data, tag->length) != tag->length) return false;
+        if (hdr.id == T_END) { if (hdr.length) return false; break; }
+        if (hdr.id >= T_BLANK && hdr.id <= T_MARK) {
+            if (hdr.length < 8) return false;
+            const BlankTag* timed = (const BlankTag*)tag->data;
+            if (timed->pos > 0x3fffffff || timed->tick > 16000000 || timed->tick > 0x3fffffff - timed->pos) return false;
+        }
+        if (hdr.id == T_DATA) {
+            if (hdr.length < 12) return false;
+            const DataTag* d = (const DataTag*)tag->data;
+            if (d->length > hdr.length - 12) return false;
+        }
+    }
+    if (!candidate.tags || candidate.tags->id != T_VERSION || candidate.tags->length < 2 ||
+        *(uint16*)candidate.tags->data != T88VER) return false;
+    Close();
+    tags = candidate.tags; candidate.tags = nullptr;
+    return Rewind();
 }
 
 // ---------------------------------------------------------------------------
@@ -111,9 +113,11 @@ bool TapeManager::Close()
 	while (tags)
 	{
 		Tag* n = tags->next;
-		delete []tags;
+		delete []reinterpret_cast<uchar*>(tags);
 		tags = n;
 	}
+	pos = nullptr; data = nullptr; datasize = offset = 0;
+	tick = timercount = timerremain = 0; mode = T_BLANK;
 	return true;
 }
 
@@ -123,7 +127,8 @@ bool TapeManager::Close()
 bool TapeManager::Rewind(bool timer)
 {
 	pos = tags;
-	scheduler->DelEvent(event), event = 0;
+	SetTimer(0);
+	tick = 0; data = nullptr; datasize = offset = 0; mode = T_BLANK;
 	if (pos)
 	{
 		tick = 0;
@@ -146,14 +151,14 @@ bool TapeManager::Rewind(bool timer)
 //
 bool TapeManager::Motor(bool s)
 {
-	if (motor == s)
-		return true;
+	if (motor == s) return true;
+	FlushCarrier();
 	if (s)
 	{
 		statusdisplay.Show(10, 2000, "Motor on: %d %d", timerremain, timercount);
 		time = scheduler->GetTime();
 		if (timerremain)
-			event = scheduler->AddEvent(timercount*125/6, this, STATIC_CAST(TimeFunc, &TapeManager::Timer));
+			event = scheduler->AddEvent(timerremain*125/6, this, STATIC_CAST(TimeFunc, &TapeManager::Timer));
 		motor = true;
 	}
 	else
@@ -161,7 +166,7 @@ bool TapeManager::Motor(bool s)
 		if (timercount)
 		{
 			int td = (scheduler->GetTime() - time) * 6 / 125;
-			timerremain = Max(10, timerremain - td);
+			timerremain = Max(0, int(timerremain) - td);
 			scheduler->DelEvent(event), event = 0;
 			statusdisplay.Show(10, 2000, "Motor off: %d %d", timerremain, timercount);
 		}
@@ -177,7 +182,7 @@ uint TapeManager::GetPos()
 	if (motor)
 	{
 		if (timercount)
-			return tick + (scheduler->GetTime() - time) * 6 / 125;
+			return tick + timercount - timerremain + (scheduler->GetTime() - time) * 6 / 125;
 		else
 			return tick;
 	}
@@ -201,7 +206,7 @@ void TapeManager::Proceed(bool timer)
 			mode = T_BLANK;
 			pos = 0;
 			statusdisplay.Show(50, 0, "end of tape", tick);
-			timercount = 0;
+			SetTimer(0); data = nullptr; datasize = offset = 0;
 			return;
 
 		case T_BLANK:
@@ -211,7 +216,7 @@ void TapeManager::Proceed(bool timer)
 			BlankTag* t = (BlankTag*) pos->data;
 			mode = (Mode) pos->id;
 
-			if (t->pos + t->tick - tick <= 0)
+			if (t->pos + t->tick <= tick)
 				break;
 
 			if (timer)
@@ -253,6 +258,7 @@ void TapeManager::Proceed(bool timer)
 //
 void IOCALL TapeManager::Timer(uint)
 {
+    event = nullptr; // Scheduler has already removed this one-shot event.
 	tick += timercount;
 	statusdisplay.Show(50, 0, "tape: %d", tick);
 	
@@ -290,9 +296,10 @@ void TapeManager::SetTimer(int count)
 {
 	if (count > 100)
 		LOG1("Timer: %d\n", count);
-	scheduler->DelEvent(event), event = 0;
-	timercount = count;
-	if (motor)
+	if (scheduler) scheduler->DelEvent(event);
+	event = 0;
+	timercount = timerremain = count;
+	if (motor && scheduler)
 	{
 		time = scheduler->GetTime();
 		if (count)			// 100000/4800
@@ -316,7 +323,7 @@ inline void TapeManager::Send(uint byte)
 //
 void TapeManager::RequestData(uint, uint)
 {
-	if (mode == T_DATA)
+	if (motor && mode == T_DATA && event)
 	{
 		scheduler->SetEvent(event, 1, this, STATIC_CAST(TimeFunc, &TapeManager::Timer));
 	}
@@ -336,7 +343,7 @@ bool TapeManager::Seek(uint newpos, uint off)
 		Proceed(false);
 	}
 	if (!pos)
-		return false;
+		return newpos == tick && off == 0;
 	
 	switch (pos->prev->id)
 	{
@@ -353,11 +360,12 @@ bool TapeManager::Seek(uint newpos, uint off)
 
 	case T_DATA:
 		mode = T_DATA;
+		if (off >= uint(datasize)) return false;
 		offset = off;
-		newpos = tick + offset * (datatype ? 44 : 88);
+		tick += offset * (datatype & 0x100 ? 44 : 88);
 		data += offset;
 		datasize -= offset;
-		SetTimer(datatype ? 44 : 88);
+		SetTimer(datatype & 0x100 ? 44 : 88);
 		break;
 
 	default:
@@ -370,7 +378,9 @@ bool TapeManager::Seek(uint newpos, uint off)
 
 void IOCALL TapeManager::Out30(uint, uint d)
 {
-	Motor(!!(d & 8));
+	if ((outputControl & 0x3c) != (d & 0x3c)) FlushCarrier();
+	outputControl = d;
+	if (motor != !!(d & 8)) Motor(!!(d & 8));
 }
 
 uint IOCALL TapeManager::In40(uint)
@@ -427,3 +437,123 @@ const Device::InFuncPtr TapeManager::indef[] =
 {
 	STATIC_CAST(Device::InFuncPtr, &TapeManager::In40),
 };
+
+// M88V additions (BSD-2-Clause): separate cassette output, following X88000.
+void TapeManager::FlushCarrier()
+{
+    uint now = scheduler ? scheduler->GetTime() : 0;
+    uint elapsed = uint((uint64_t(uint(now - recordTime)) * 6) / 125);
+    recordTime = now;
+    elapsed = elapsed > recordDataTicks ? elapsed - recordDataTicks : 0;
+    recordDataTicks = 0;
+    if (!OutputActive() || !elapsed) return;
+    uint16 id = outputControl & 4 ? T_SPACE : T_MARK;
+    if (!recorded.empty() && recorded.back().id == id)
+        recorded.back().tick += elapsed;
+    else
+        recorded.push_back({id, 0, elapsed, {}});
+    recordingDirty = true;
+}
+
+void TapeManager::SetSerial(bool enabled, uint type)
+{
+    if (transmit == enabled && serialType == type) return;
+    FlushCarrier();
+    transmit = enabled;
+    serialType = type;
+}
+
+void TapeManager::WriteByte(uint byte)
+{
+    if (!OutputActive()) return;
+    uint now = scheduler ? scheduler->GetTime() : 0;
+    uint ticks = outputControl & 0x10 ? 44 : 88;
+    uint elapsed = uint((uint64_t(uint(now - recordTime)) * 6) / 125);
+    if (elapsed > ticks) FlushCarrier();
+    recordTime = now;
+    recordDataTicks = ticks;
+    uint16 type = uint16(serialType | (outputControl & 0x10 ? 0x100 : 0));
+    if (recorded.empty() || recorded.back().id != T_DATA ||
+        recorded.back().type != type || recorded.back().bytes.size() >= 32768)
+        recorded.push_back({T_DATA, type, 0, {}});
+    recorded.back().bytes.push_back(uint8(byte));
+    recorded.back().tick += ticks;
+    recordingDirty = true;
+}
+
+void TapeManager::ClearRecording()
+{
+    recorded.clear();
+    recordDataTicks = 0;
+    recordingDirty = false;
+    recordTime = scheduler ? scheduler->GetTime() : 0;
+}
+
+bool TapeManager::WriteImage(const char* file, const std::vector<RecordedTag>& image, bool cmt)
+{
+    // Write beside the destination, then replace it only after successful close.
+    namespace fs = std::filesystem;
+    fs::path destination(file), temporary(destination);
+    temporary += ".m88v-tmp";
+    std::error_code ec;
+    if (fs::exists(temporary, ec) || ec) return false;
+    std::ofstream out(temporary, std::ios::binary);
+    if (!out) return false;
+    auto word = [&](uint v) { out.put(char(v)); out.put(char(v >> 8)); };
+    auto dword = [&](uint v) { word(v); word(v >> 16); };
+    if (!cmt) {
+        out.write(T88ID, 24);
+        word(T_VERSION); word(2); word(T88VER);
+    }
+    uint32 position = 0;
+    for (const auto& tag : image) {
+        if (!cmt) {
+            word(tag.id); word(uint(tag.bytes.size()) + (tag.id == T_DATA ? 12 : 8));
+            dword(position); dword(tag.tick);
+            if (tag.id == T_DATA) { word(uint(tag.bytes.size())); word(tag.type); }
+        }
+        if (!tag.bytes.empty()) out.write((const char*)tag.bytes.data(), tag.bytes.size());
+        position += tag.tick;
+    }
+    if (!cmt) { word(T_END); word(0); }
+    out.flush();
+    bool good = bool(out);
+    out.close(); good = good && !out.fail();
+    if (good) {
+#ifdef _WIN32
+        good = !!MoveFileExW(temporary.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+#else
+        fs::rename(temporary, destination, ec); good = !ec;
+#endif
+    }
+    if (!good) fs::remove(temporary, ec);
+    return good;
+}
+
+bool TapeManager::CreateEmpty(const char* file)
+{
+    return WriteImage(file, {}, false);
+}
+
+bool TapeManager::SaveRecording(const char* file, bool cmt)
+{
+    FlushCarrier();
+    if (!WriteImage(file, recorded, cmt)) return false;
+    recordingDirty = false;
+    return true;
+}
+
+bool TapeManager::SeekEnd()
+{
+    if (!tags) return false;
+    SetTimer(0);
+    tick = 0;
+    for (Tag* t = tags; t; t = t->next) {
+        if (t->id >= T_BLANK && t->id <= T_MARK) {
+            BlankTag* b = (BlankTag*)t->data;
+            tick = Max(tick, b->pos + b->tick);
+        }
+    }
+    pos = nullptr; data = nullptr; datasize = offset = 0; mode = T_BLANK;
+    return true;
+}

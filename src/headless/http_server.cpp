@@ -300,7 +300,7 @@ Response HandleRequest(HeadlessMachine& machine, const Request& request, const s
     if (!Authorized(request, token)) return ErrorResponse(401, "missing or invalid API token");
 
     auto& debug=machine.Debugger();
-    if(machine.Recording() && (request.path=="/v1/reset" || request.path=="/v1/load-bin" || request.path=="/v1/tape/open" || request.path=="/v1/debug/watch"))
+    if(machine.Recording() && (request.path=="/v1/reset" || request.path=="/v1/load-bin" || request.path.compare(0,9,"/v1/tape/")==0 || request.path=="/v1/debug/watch"))
         return ErrorResponse(409,"Stop input recording before changing the program, media or watchpoints");
     const auto query = [&](const std::string& key,const std::string& fallback="") {
         auto i=request.query.find(key);return i==request.query.end()?fallback:i->second;
@@ -404,6 +404,27 @@ Response HandleRequest(HeadlessMachine& machine, const Request& request, const s
             return ErrorResponse(400, error);
         }
         return JsonResponse(200, StatusJson(machine));
+    }
+    if (request.path.compare(0, 9, "/v1/tape/") == 0 && request.method == "POST" && request.path != "/v1/tape/open") {
+        auto& tape = machine.Tape();
+        const std::string action = request.path.substr(9);
+        bool ok = false;
+        if (action == "rewind") ok = tape.IsOpen() && tape.Rewind();
+        else if (action == "end") ok = tape.SeekEnd();
+        else if (action == "close") ok = tape.Close();
+        else if (action == "clear-recording") { tape.ClearRecording(); ok = true; }
+        else if (action == "create" || action == "save") {
+            auto path = request.query.find("path");
+            if (path == request.query.end() || path->second.empty()) return ErrorResponse(400, "path is required");
+            if (action == "create") ok = TapeManager::CreateEmpty(path->second.c_str());
+            else {
+                auto format = request.query.find("format");
+                if (format != request.query.end() && format->second != "t88" && format->second != "cmt")
+                    return ErrorResponse(400, "format must be t88 or cmt");
+                ok = tape.SaveRecording(path->second.c_str(), format != request.query.end() && format->second == "cmt");
+            }
+        } else return ErrorResponse(404, "unknown tape action");
+        return ok ? JsonResponse(200, "{\"ok\":true}") : ErrorResponse(400, "tape operation failed");
     }
     if (request.path == "/v1/tape/open" && request.method == "POST") {
         const auto path = request.query.find("path");

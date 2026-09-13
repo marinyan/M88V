@@ -260,13 +260,19 @@
 #define IDM_MEM_0_ERAM3                 40228
 #define IDM_4MHZ                        40229
 #define IDM_8MHZ                        40230
+#define IDM_TAPE_NEW 40231
+#define IDM_TAPE_SAVE 40232
+#define IDM_TAPE_REWIND 40233
+#define IDM_TAPE_END 40234
+#define IDM_TAPE_EJECT 40235
+#define IDM_TAPE_CLEAR 40236
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        140
-#define _APS_NEXT_COMMAND_VALUE         40231
+#define _APS_NEXT_COMMAND_VALUE         40237
 #define _APS_NEXT_CONTROL_VALUE         1136
 #define _APS_NEXT_SYMED_VALUE           101
 #endif

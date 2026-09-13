@@ -11,6 +11,7 @@
 #include "device.h"
 
 class Scheduler;
+class TapeManager;
 
 namespace PC8801
 {
@@ -28,6 +29,7 @@ public:
 	SIO(const ID& id);
 	~SIO();
 	bool Init(IOBus* bus, uint prxrdy, uint prequest);
+	void SetTapeOutput(TapeManager* tape) { tapeOutput = tape; }
 
 	void IOCALL Reset(uint=0, uint=0);
 	void IOCALL SetControl(uint, uint d);
@@ -47,6 +49,8 @@ private:
 	enum Mode { clear=0, async, sync1, sync2, sync };
 	enum Parity { none='N', odd='O', even='E' };
 
+	TapeManager* tapeOutput = nullptr;
+	uint outputType = 0xcc;
 	IOBus* bus;
 	uint prxrdy;
 	uint prequest;

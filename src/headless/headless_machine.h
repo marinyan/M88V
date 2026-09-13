@@ -41,6 +41,7 @@ public:
     bool RunFrames(uint32_t frames, std::string* error);
     bool LoadBinary(const std::string& path, uint16_t address, bool installLauncher, std::string* error);
     bool OpenTape(const std::string& path, std::string* error);
+    TapeManager& Tape() { return tapeManager_; }
     M88V::Debugger& Debugger() { return debugger_; }
     const M88V::Debugger& Debugger() const { return debugger_; }
     std::string MemoryMapJson() { return M88V::MemoryInspector::Json(*GetMem1(),*GetCPU1()); }
