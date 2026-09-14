@@ -116,6 +116,7 @@ BEGIN
     POPUP "&Tools"
     BEGIN
         MENUITEM "&Configure...",               IDM_CONFIG
+        MENUITEM "&Serial...",                  IDM_SERIAL
         MENUITEM SEPARATOR
         MENUITEM "S&how Status",                IDM_STATUSBAR
         MENUITEM "&Capture...\tAlt+F2",         IDM_CAPTURE
@@ -675,3 +676,28 @@ END
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
 
+
+IDD_SERIAL DIALOGEX 0, 0, 290, 215
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Serial"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT "COM port", -1, 12, 15, 58, 10
+    COMBOBOX IDC_SERIAL_PORT, 78, 12, 120, 90, CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON "Refresh", IDC_SERIAL_REFRESH, 210, 12, 66, 15
+    LTEXT "Baud rate", -1, 12, 40, 58, 10
+    COMBOBOX IDC_SERIAL_BAUD, 78, 37, 120, 110, CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
+    LTEXT "Data bits", -1, 12, 65, 58, 10
+    COMBOBOX IDC_SERIAL_BITS, 78, 62, 52, 65, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT "Parity", -1, 150, 65, 45, 10
+    COMBOBOX IDC_SERIAL_PARITY, 206, 62, 70, 65, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT "Stop bits", -1, 12, 90, 58, 10
+    COMBOBOX IDC_SERIAL_STOP, 78, 87, 52, 65, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT "Flow control", -1, 150, 90, 55, 10
+    COMBOBOX IDC_SERIAL_FLOW, 206, 87, 70, 65, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT "Configure the guest USART too. Tape must be ejected.", -1, 12, 116, 264, 12
+    LTEXT "Disconnected", IDC_SERIAL_STATUS, 12, 136, 264, 27
+    PUSHBUTTON "Connect", IDC_SERIAL_CONNECT, 12, 174, 76, 18
+    PUSHBUTTON "Disconnect", IDC_SERIAL_DISCONNECT, 98, 174, 76, 18
+    DEFPUSHBUTTON "Close", IDOK, 200, 174, 76, 18
+END

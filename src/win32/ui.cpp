@@ -23,6 +23,7 @@
 #include "pc88/opnif.h"
 #include "pc88/diskmgr.h"
 #include "pc88/tapemgr.h"
+#include "serial_dialog.h"
 #include "filetest.h"
 #include "winvars.h"
 #include "winexapi.h"
@@ -648,6 +649,11 @@ LRESULT WinUI::WmCommand(HWND hwnd, WPARAM wparam, LPARAM lparam)
 		SetGUIFlag(false);
 		break;
 
+    case IDM_SERIAL:
+        SetGUIFlag(true);
+        ShowSerialDialog(hinst, hwnd, core);
+        SetGUIFlag(false);
+        break;
 	case IDM_CONFIG:
 		SetGUIFlag(true);
 		winconfig.Show(hinst, hwnd, &config);
@@ -1480,6 +1486,7 @@ void WinUI::ChangeTapeImage()
 
 void WinUI::TapeCommand(uint command)
 {
+    if (core.SerialActive()) { MessageBoxA(hwnd,"Disconnect serial in Tools > Serial first.","Serial",MB_OK | MB_ICONINFORMATION); return; }
     if (command == IDM_TAPE_REWIND) { tapemgr->Rewind(); return; }
     if (command == IDM_TAPE_END) { tapemgr->SeekEnd(); return; }
     if (command == IDM_TAPE_EJECT) {
@@ -1519,6 +1526,7 @@ void WinUI::TapeCommand(uint command)
 
 void WinUI::OpenTapeImage(const char* filename)
 {
+    if (core.SerialActive()) { MessageBoxA(hwnd,"Disconnect serial in Tools > Serial first.","Serial",MB_OK | MB_ICONINFORMATION); return; }
 	char buf[MAX_PATH+32];
 	MENUITEMINFO mii;
 	memset(&mii, 0, sizeof(mii));
@@ -2124,6 +2132,7 @@ void WinUI::GetSnapshotName(char* name, int n)
 //
 void WinUI::SaveSnapshot(int n)
 {
+    if (core.SerialActive()) { MessageBoxA(hwnd,"Disconnect serial in Tools > Serial first.","Serial",MB_OK | MB_ICONINFORMATION); return; }
 	char name[MAX_PATH];
 	GetSnapshotName(name, n);
 	if (core.SaveShapshot(name))
@@ -2139,6 +2148,7 @@ void WinUI::SaveSnapshot(int n)
 //
 void WinUI::LoadSnapshot(int n)
 {
+    if (core.SerialActive()) { MessageBoxA(hwnd,"Disconnect serial in Tools > Serial first.","Serial",MB_OK | MB_ICONINFORMATION); return; }
 	char name[MAX_PATH];
 	GetSnapshotName(name, n);
 	bool r;

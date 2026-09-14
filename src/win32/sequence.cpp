@@ -119,7 +119,9 @@ inline int Sequencer::Execute(long clk, long length, long eff)
 {
 	CriticalSection::Lock lock(cs);
 	if (!active || shouldterminate || timingRevision != executionRevision || length <= 0) return 0;
+	if (ioPump) ioPump(ioContext);
 	const int consumed = vm->Proceed(length, clk, eff);
+	if (ioPump) ioPump(ioContext);
 	execcount += clk * consumed;
 	return consumed;
 }

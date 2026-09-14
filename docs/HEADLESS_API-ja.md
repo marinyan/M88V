@@ -25,6 +25,9 @@
 
 ## エンドポイント
 
+ディスク・シリアル・Windows COM接続の詳細は
+[ディスクとシリアルAPI](MEDIA_SERIAL_API-ja.md)を参照。
+
 | Method | Path | 用途 |
 | --- | --- | --- |
 | `GET` | `/health` | トークン不要の生存確認 |

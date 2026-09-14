@@ -33,6 +33,7 @@ public:
 	long GetExecCount();
 	void Activate(bool active);
 
+	void SetIoPump(void (*pump)(void*), void* context) { CriticalSection::Lock lock(cs); ioPump=pump; ioContext=context; }
 	void Lock() { cs.lock(); }
 	void Unlock() { cs.unlock(); }
 
@@ -49,6 +50,8 @@ private:
 	static uint CALLBACK ThreadEntry(LPVOID arg);
 
 	PC88* vm;
+    void (*ioPump)(void*) = nullptr;
+    void* ioContext = nullptr;
 
 	TimeKeeper keeper;
 

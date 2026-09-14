@@ -2,10 +2,12 @@
 
 #include "headless_draw.h"
 #include "matrix_keyboard.h"
+#include "serial_port.h"
 #include "pc88.h"
 #include "pc88/config.h"
 #include "diskmgr.h"
 #include "tapemgr.h"
+#include "pc88/sio.h"
 #include "development/profile.h"
 #include "development/debugger.h"
 
@@ -42,6 +44,21 @@ public:
     bool LoadBinary(const std::string& path, uint16_t address, bool installLauncher, std::string* error);
     bool OpenTape(const std::string& path, std::string* error);
     TapeManager& Tape() { return tapeManager_; }
+    PC8801::SIO& Serial() { return *GetSerial(); }
+    const PC8801::SIO& Serial() const { return *GetSerial(); }
+    SerialPort& Com() { return com_; }
+    const SerialPort& Com() const { return com_; }
+    void PumpSerial() { com_.Pump(Serial()); }
+    struct DiskStatus {
+        bool mounted=false, readOnly=false, requestedReadOnly=true;
+        int index=-1;
+        unsigned count=0;
+        std::string path;
+    };
+    DiskStatus GetDiskStatus(unsigned drive) const;
+    bool MountDisk(unsigned drive, const std::string& path, unsigned index, bool readOnly, std::string& error);
+    bool UnmountDisk(unsigned drive, std::string& error);
+    bool SelectDisk(unsigned drive, unsigned index, std::string& error);
     M88V::Debugger& Debugger() { return debugger_; }
     const M88V::Debugger& Debugger() const { return debugger_; }
     std::string MemoryMapJson() { return M88V::MemoryInspector::Json(*GetMem1(),*GetCPU1()); }
@@ -71,8 +88,10 @@ public:
 private:
     static PC8801::Config MakeDevelopmentConfig(M88V::BasicMode mode);
 
+    SerialPort com_;
     HeadlessDraw draw_;
     DiskManager diskManager_;
+    bool diskReadOnly_[2] = {true,true};
     TapeManager tapeManager_;
     MatrixKeyboard keyboard_;
     M88V::Debugger debugger_;

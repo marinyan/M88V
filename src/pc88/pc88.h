@@ -102,6 +102,7 @@ public:
 	bool IsN80Supported();
 	bool IsN80V2Supported();
 
+	PC8801::SIO* GetSerial() const { return siotape; }
 	PC8801::Memory* GetMem1() { return mem1; }
 	PC8801::SubSystem* GetMem2() { return subsys; }
 	PC8801::OPNIF*	GetOPN1() { return opn1; }

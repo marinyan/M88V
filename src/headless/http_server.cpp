@@ -250,6 +250,35 @@ std::string RegistersJson(const HeadlessMachine::Registers& reg) {
     return out.str();
 }
 
+std::string DisksJson(const HeadlessMachine& machine) {
+    std::ostringstream out;
+    out << '[';
+    for (unsigned drive=0;drive<2;++drive) {
+        const auto disk=machine.GetDiskStatus(drive);
+        if (drive) out << ',';
+        out << "{\"drive\":" << drive+1 << ",\"mounted\":" << (disk.mounted?"true":"false")
+            << ",\"path\":\"" << JsonEscape(disk.path) << "\",\"index\":" << disk.index
+            << ",\"image_count\":" << disk.count << ",\"readonly\":" << (disk.readOnly?"true":"false")
+            << ",\"requested_readonly\":" << (disk.requestedReadOnly?"true":"false") << '}';
+    }
+    return out.str()+']';
+}
+
+std::string SerialJson(const HeadlessMachine& machine) {
+    const auto& serial=machine.Serial();
+    std::ostringstream out;
+    out << "{\"connected\":" << (serial.HostEnabled()?"true":"false")
+        << ",\"rx_enabled\":" << (serial.ReceiveEnabled()?"true":"false")
+        << ",\"tx_enabled\":" << (serial.TransmitEnabled()?"true":"false")
+        << ",\"rx_pending\":" << (serial.HostEnabled()?serial.HostRxPending():0)
+        << ",\"tx_pending\":" << serial.HostTxPending() << ",\"tx_dropped\":" << serial.HostDropped()
+        << ",\"com_connected\":" << (machine.Com().Connected()?"true":"false")
+        << ",\"com_port\":\"" << JsonEscape(machine.Com().Name()) << "\""
+        << ",\"com_error\":\"" << JsonEscape(machine.Com().Error()) << "\""
+        << ",\"capacity\":" << PC8801::SIO::HostCapacity << '}';
+    return out.str();
+}
+
 std::string StatusJson(const HeadlessMachine& machine) {
     std::ostringstream out;
     out << "{\"ok\":true,\"machine\":\"" << machine.MachineName() << "\",\"mode\":\""
@@ -258,7 +287,8 @@ std::string StatusJson(const HeadlessMachine& machine) {
         << machine.FrameCount() << ",\"framebuffer\":{\"width\":" << machine.Framebuffer().Width()
         << ",\"height\":" << machine.Framebuffer().Height() << "},\"registers\":"
         << RegistersJson(machine.GetRegisters()) << ",\"recording\":" << (machine.Recording()?"true":"false")
-        << ",\"debug\":" << machine.Debugger().StatusJson() << '}';
+        << ",\"debug\":" << machine.Debugger().StatusJson() << ",\"disks\":" << DisksJson(machine)
+        << ",\"serial\":" << SerialJson(machine) << '}';
     return out.str();
 }
 
@@ -299,6 +329,7 @@ Response HandleRequest(HeadlessMachine& machine, const Request& request, const s
     if (request.path.rfind("/v1/", 0) != 0) return ErrorResponse(404, "endpoint not found");
     if (!Authorized(request, token)) return ErrorResponse(401, "missing or invalid API token");
 
+    machine.PumpSerial();
     auto& debug=machine.Debugger();
     if(machine.Recording() && (request.path=="/v1/reset" || request.path=="/v1/load-bin" || request.path.compare(0,9,"/v1/tape/")==0 || request.path=="/v1/debug/watch"))
         return ErrorResponse(409,"Stop input recording before changing the program, media or watchpoints");
@@ -308,6 +339,60 @@ Response HandleRequest(HeadlessMachine& machine, const Request& request, const s
     const auto number = [&](const std::string& key,uint32_t fallback,uint32_t limit,uint32_t& value) {
         auto i=request.query.find(key);value=fallback;return i==request.query.end() || ParseUnsigned(i->second,limit,&value);
     };
+    if (request.path=="/v1/serial/ports") {
+        if (request.method!="GET") return ErrorResponse(405,"method not allowed");
+        std::string json="{\"ok\":true,\"ports\":[";
+        for (const auto& port:SerialPort::Ports()) { if(json.back()!='[') json+=',';json+='"'+JsonEscape(port)+'"'; }
+        return JsonResponse(200,json+"]}");
+    }
+    if (request.path=="/v1/serial/status") {
+        if (request.method!="GET") return ErrorResponse(405,"method not allowed");
+        return JsonResponse(200,"{\"ok\":true,\"serial\":"+SerialJson(machine)+'}');
+    }
+    if (request.path=="/v1/serial/open" || request.path=="/v1/serial/close" ||
+        request.path=="/v1/serial/write" || request.path=="/v1/serial/read" || request.path=="/v1/serial/clear") {
+        if (request.method!="POST") return ErrorResponse(405,"method not allowed");
+        if (machine.Recording()) return ErrorResponse(409,"stop input recording before serial operations");
+        auto& serial=machine.Serial();
+        if (request.path=="/v1/serial/open") {
+            if (machine.Tape().IsOpen() || machine.Tape().HasRecording() || machine.Tape().IsOutputActive())
+                return ErrorResponse(409,"close tape media and clear inactive cassette output before opening serial");
+            if (machine.Com().Connected()) return ErrorResponse(409,"close the COM connection first");
+            if (!query("port").empty()) {
+                if (serial.HostEnabled()) return ErrorResponse(409,"close the virtual endpoint first");
+                uint32_t baud,bits;
+                if (!number("baud",9600,4000000,baud) || !number("data_bits",8,8,bits)) return ErrorResponse(400,"invalid COM settings");
+                std::string error;
+                if (!machine.Com().Open(query("port"),baud,bits,query("parity","none"),query("stop_bits","1"),query("flow","none"),error)) return ErrorResponse(400,error);
+            }
+            serial.EnableHost(true);
+        } else if (request.path=="/v1/serial/close") { machine.Com().Close(); serial.EnableHost(false); }
+        else {
+            if (machine.Com().Connected()) return ErrorResponse(409,"manual serial operations are unavailable while COM is connected");
+            if (!serial.HostEnabled()) return ErrorResponse(409,"serial endpoint is closed");
+            if (request.path=="/v1/serial/clear") serial.HostClear();
+            else if (request.path=="/v1/serial/write") {
+                const auto hex=query("hex");
+                if (hex.empty() || hex.size()%2 || hex.size()>8192) return ErrorResponse(400,"hex must contain 1 to 4096 complete bytes");
+                std::vector<uint8_t> bytes;
+                for (size_t i=0;i<hex.size();i+=2) {
+                    const int high=HexDigit(hex[i]),low=HexDigit(hex[i+1]);
+                    if (high<0 || low<0) return ErrorResponse(400,"invalid hexadecimal data");
+                    bytes.push_back(uint8_t(high*16+low));
+                }
+                if (!serial.HostWrite(bytes)) return ErrorResponse(409,"serial receive queue is full; no bytes were accepted");
+                return JsonResponse(200,"{\"ok\":true,\"accepted\":"+std::to_string(bytes.size())+",\"serial\":"+SerialJson(machine)+'}');
+            } else {
+                uint32_t maximum;
+                if (!number("max",4096,4096,maximum) || !maximum) return ErrorResponse(400,"max must be 1 to 4096");
+                const auto bytes=serial.HostRead(maximum);
+                return JsonResponse(200,"{\"ok\":true,\"hex\":\""+Hex(bytes)+"\",\"length\":"+std::to_string(bytes.size())+",\"serial\":"+SerialJson(machine)+'}');
+            }
+        }
+        return JsonResponse(200,"{\"ok\":true,\"serial\":"+SerialJson(machine)+'}');
+    }
+    if (machine.Serial().HostEnabled() && request.path.compare(0,9,"/v1/tape/")==0 && request.method=="POST")
+        return ErrorResponse(409,"close the host serial endpoint before tape operations");
     if(request.path=="/v1/map") {
         if(request.method!="GET")return ErrorResponse(405,"method not allowed");
         return JsonResponse(200,machine.MemoryMapJson());
@@ -404,6 +489,28 @@ Response HandleRequest(HeadlessMachine& machine, const Request& request, const s
             return ErrorResponse(400, error);
         }
         return JsonResponse(200, StatusJson(machine));
+    }
+    if (request.path=="/v1/disks") {
+        if (request.method!="GET") return ErrorResponse(405,"method not allowed");
+        return JsonResponse(200,"{\"ok\":true,\"disks\":"+DisksJson(machine)+'}');
+    }
+    if (request.path=="/v1/disk/mount" || request.path=="/v1/disk/unmount" || request.path=="/v1/disk/select") {
+        if (request.method!="POST") return ErrorResponse(405,"method not allowed");
+        if (machine.Recording()) return ErrorResponse(409,"stop input recording before changing disk media");
+        uint32_t drive=0,index=0,readonly=1;
+        if (!number("drive",0,2,drive) || drive<1) return ErrorResponse(400,"drive must be 1 or 2");
+        if (!number("index",0,63,index)) return ErrorResponse(400,"index must be from 0 to 63");
+        if (!number("readonly",1,1,readonly)) return ErrorResponse(400,"readonly must be 0 or 1");
+        std::string error;
+        bool ok=false;
+        if (request.path=="/v1/disk/mount") ok=machine.MountDisk(drive-1,query("path"),index,readonly!=0,error);
+        else if (request.path=="/v1/disk/unmount") ok=machine.UnmountDisk(drive-1,error);
+        else {
+            if (request.query.find("index")==request.query.end()) return ErrorResponse(400,"index is required");
+            ok=machine.SelectDisk(drive-1,index,error);
+        }
+        if (!ok) return ErrorResponse(400,error);
+        return JsonResponse(200,"{\"ok\":true,\"disks\":"+DisksJson(machine)+'}');
     }
     if (request.path.compare(0, 9, "/v1/tape/") == 0 && request.method == "POST" && request.path != "/v1/tape/open") {
         auto& tape = machine.Tape();

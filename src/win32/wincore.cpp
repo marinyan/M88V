@@ -29,6 +29,7 @@
 #include "development/binary_loader.h"
 #include "development/snapshot.h"
 #include "pc88/tapemgr.h"
+#include "pc88/sio.h"
 #include <filesystem>
 
 #define LOGNAME "wincore"
@@ -111,6 +112,8 @@ bool WinCore::Init
 	if (!ConnectExternalDevices())
 		return false;
 
+    serialTape = tape;
+    seq.SetIoPump([](void* context) { auto* core=static_cast<WinCore*>(context); core->serialPort.Pump(*core->GetSerial()); },this);
 	seq.SetClock(40);	// 4MHz
 	seq.SetSpeed(100);	// 100%
 
@@ -126,6 +129,7 @@ bool WinCore::Init
 bool WinCore::Cleanup()
 {
 	seq.Cleanup();
+    serialPort.Close();
 	
 	for (ExtendModules::iterator i = extmodules.begin(); i != extmodules.end(); ++i)
 		delete *i;
@@ -144,6 +148,8 @@ bool WinCore::Cleanup()
 void WinCore::Reset()
 {
 	LockObj lock(this);
+    serialPort.Close();
+    GetSerial()->EnableHost(false);
 	PC88::Reset();
 }
 
@@ -329,6 +335,8 @@ bool WinCore::LoadShapshot(const char* filename, const char* diskname)
 	ApplyConfig(&config);
 	
 	// Reset
+    serialPort.Close();
+    GetSerial()->EnableHost(false);
 	PC88::Reset();
 
 	// 読み込み
@@ -376,7 +384,9 @@ bool WinCore::LoadShapshot(const char* filename, const char* diskname)
 			if (!r)
 			{
 				winstatusdisplay.Show(70, 3000, "バージョンが異なります");
-				PC88::Reset();
+			    serialPort.Close();
+    GetSerial()->EnableHost(false);
+	PC88::Reset();
 			}
 		}
 		delete[] buf;
