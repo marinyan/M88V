@@ -106,7 +106,9 @@ private:
 
 	// ウインドウの状態
 	bool background;
-	bool fullscreen;
+	bool fullscreen = false;
+    int screenWidth=640, screenHeight=400, scaleFilter=0;
+    int dragWidth=640, dragHeight=400;
 	uint displaychangedtime;
 	uint resetwindowsize;
 	DWORD wstyle;
@@ -172,6 +174,8 @@ private:
 	LRESULT WmPaint(HWND, WPARAM, LPARAM);
 	LRESULT WmCommand(HWND, WPARAM, LPARAM);
 	LRESULT WmSize(HWND, WPARAM, LPARAM);
+    LRESULT WmSizing(HWND, WPARAM, LPARAM);
+    LRESULT WmGetMinMaxInfo(HWND, WPARAM, LPARAM);
 	LRESULT WmDrawItem(HWND, WPARAM, LPARAM);
 	LRESULT WmEnterMenuLoop(HWND, WPARAM, LPARAM);
 	LRESULT WmExitMenuLoop(HWND, WPARAM, LPARAM);

@@ -41,8 +41,9 @@ void DrawMediaBar(HDC dc, RECT bounds, const std::array<MediaSlot, 3>& slots, UI
         DrawTextW(dc, labels[i], -1, &title, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
         RECT detail = {x+px(i == 2 ? 85 : 68), title.top, cell.right-px(10), title.bottom};
         SetTextColor(dc, slots[i].mounted ? text : subdued);
-        DrawTextW(dc, slots[i].detail.c_str(), -1, &detail,
-            DT_SINGLELINE | DT_RIGHT | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+        if (cell.right-cell.left >= px(185))
+            DrawTextW(dc, slots[i].detail.c_str(), -1, &detail,
+                DT_SINGLELINE | DT_RIGHT | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
         SelectObject(dc, filename);
         SetTextColor(dc, slots[i].mounted ? text : subdued);
         RECT name = {x, cell.top+px(29), cell.right-px(10), cell.bottom-px(8)};
@@ -94,6 +95,7 @@ void MediaBar::Resize(int statusHeight)
     RECT client; GetClientRect(parent, &client);
     SetWindowPos(window, HWND_TOP, 0, std::max(0L, client.bottom-statusHeight-Height()),
         client.right, Height(), SWP_NOACTIVATE);
+    InvalidateRect(window, nullptr, FALSE);
     UpdateTooltips();
 }
 
@@ -136,6 +138,12 @@ LRESULT CALLBACK MediaBar::WindowProc(HWND hwnd, UINT message, WPARAM wp, LPARAM
         SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
     }
     if (message == WM_ERASEBKGND) return 1;
+    if (self && message == WM_SIZE) {
+        // Every slot moves with the width. Repaint old label positions too,
+        // rather than retaining the pixels Windows copies during resizing.
+        InvalidateRect(hwnd, nullptr, FALSE);
+        return 0;
+    }
     if (self && message == WM_LBUTTONDOWN) {
         self->pressedSlot = self->HitTest({static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))});
         if (self->pressedSlot >= 0) SetCapture(hwnd);

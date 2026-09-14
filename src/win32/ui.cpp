@@ -18,6 +18,7 @@
 #include "error.h"
 #include "88config.h"
 #include "status.h"
+#include "display_scale.h"
 #include "../common/status.h"
 #include "pc88/opnif.h"
 #include "pc88/diskmgr.h"
@@ -102,7 +103,7 @@ bool WinUI::InitM88(const char* cmdline)
 	winstatusdisplay.Init(hwnd);
 
 	// Window位置復元
-	ResizeWindow(640, 400);
+	ResizeWindow(screenWidth, screenHeight);
 	LoadWindowPosition();
 	{
 		RECT rect;
@@ -232,7 +233,7 @@ bool WinUI::InitWindow(int nwinmode)
 	if (!RegisterClass(&wcl)) 
 		return false;
 
-	wstyle = WS_CAPTION | WS_OVERLAPPED | WS_SYSMENU | WS_MINIMIZEBOX;
+	wstyle = WS_CAPTION | WS_OVERLAPPED | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME | WS_CLIPCHILDREN;
 
 	hwnd = CreateWindowEx(
 		WS_EX_ACCEPTFILES,// | WS_EX_LAYERED,
@@ -265,6 +266,9 @@ bool WinUI::InitWindow(int nwinmode)
 //
 void WinUI::SaveWindowPosition()
 {
+    char value[32];
+    sprintf_s(value,"%d",screenWidth); WritePrivateProfileString("Display","ScreenWidth",value,m88ini);
+    sprintf_s(value,"%d",scaleFilter); WritePrivateProfileString("Display","Interpolation",value,m88ini);
 	WINDOWPLACEMENT wp; 
 	wp.length = sizeof(WINDOWPLACEMENT);
 	::GetWindowPlacement( hwnd, &wp );
@@ -274,6 +278,10 @@ void WinUI::SaveWindowPosition()
 
 void WinUI::LoadWindowPosition()
 {
+    screenWidth=std::clamp(int(GetPrivateProfileInt("Display","ScreenWidth",640,m88ini)),320,7680);
+    screenHeight=MulDiv(screenWidth,5,8);
+    scaleFilter=std::clamp(int(GetPrivateProfileInt("Display","Interpolation",0,m88ini)),0,2);
+    ResizeWindow(screenWidth,screenHeight);
 	if (config.flag2 & Config::saveposition) {
 		WINDOWPLACEMENT wp;
 	    wp.length = sizeof(WINDOWPLACEMENT);
@@ -370,6 +378,8 @@ LRESULT WinUI::WinProc(HWND hwnd, UINT umsg, WPARAM wp, LPARAM lp)
 	PROC_MSG(WM_SYSKEYUP,			WmSysKeyUp);
 	PROC_MSG(WM_SYSKEYDOWN,			WmSysKeyDown);
 	PROC_MSG(WM_SIZE,				WmSize);
+    PROC_MSG(WM_SIZING, WmSizing);
+    PROC_MSG(WM_GETMINMAXINFO, WmGetMinMaxInfo);
 	PROC_MSG(WM_MOVE,				WmMove);
 	PROC_MSG(WM_DRAWITEM,			WmDrawItem);
 	PROC_MSG(WM_ENTERMENULOOP,		WmEnterMenuLoop);
@@ -539,6 +549,21 @@ LRESULT WinUI::WmPaletteChanged(HWND hwnd, WPARAM wparam, LPARAM lparam)
 LRESULT WinUI::WmCommand(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
 	uint wid = LOWORD(wparam);
+    if (wid >= IDM_SCALE_50 && wid <= IDM_SCALE_400) {
+        if (!fullscreen) {
+            if (IsZoomed(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+            int percent=50*(wid-IDM_SCALE_50+1);
+            ResizeWindow(640*percent/100,400*percent/100);
+        }
+        return 0;
+    }
+    if (wid >= IDM_FILTER_NEAREST && wid <= IDM_FILTER_BICUBIC) {
+        scaleFilter=wid-IDM_FILTER_NEAREST;
+        RECT client; GetClientRect(hwnd,&client);
+        draw.SetPresentation(client.right,std::max(0L,client.bottom-winstatusdisplay.GetHeight()),scaleFilter);
+        draw.RequestPaint();
+        return 0;
+    }
 	switch (wid)
 	{
 	case IDM_EXIT:
@@ -902,7 +927,7 @@ LRESULT WinUI::WmTimer(HWND hwnd, WPARAM wparam, LPARAM lparam)
 		if (resetwindowsize > 0)
 		{
 			resetwindowsize--;
-			ResizeWindow(640, 400);
+			ResizeWindow(screenWidth, screenHeight);
 		}
 		return 0;
 	}
@@ -967,6 +992,15 @@ LRESULT WinUI::WmMediaMenu(HWND owner, WPARAM slot, LPARAM location)
 LRESULT WinUI::WmInitMenu(HWND hwnd, WPARAM wp, LPARAM lp)
 {
 	HMENU hmenu = (HMENU) wp;
+    for (UINT id=IDM_SCALE_50; id<=IDM_SCALE_400; ++id) {
+        int p=50*(id-IDM_SCALE_50+1);
+        bool checked=!IsZoomed(hwnd) && screenWidth==640*p/100 && screenHeight==400*p/100;
+        CheckMenuItem(hmenu,id,MF_BYCOMMAND | (checked ? MF_CHECKED : MF_UNCHECKED));
+        EnableMenuItem(hmenu,id,MF_BYCOMMAND | (fullscreen ? MF_GRAYED : MF_ENABLED));
+    }
+    CheckMenuRadioItem(hmenu,IDM_FILTER_NEAREST,IDM_FILTER_BICUBIC,IDM_FILTER_NEAREST+scaleFilter,MF_BYCOMMAND);
+    for (UINT id=IDM_FILTER_NEAREST; id<=IDM_FILTER_BICUBIC; ++id)
+        EnableMenuItem(hmenu,id,MF_BYCOMMAND | (fullscreen ? MF_GRAYED : MF_ENABLED));
 #ifndef DEBUG_MONITOR
 	EnableMenuItem(hmenu, IDM_LOGSTART, MF_GRAYED);
 	EnableMenuItem(hmenu, IDM_LOGEND, MF_GRAYED);
@@ -1022,11 +1056,42 @@ LRESULT WinUI::WmInitMenu(HWND hwnd, WPARAM wp, LPARAM lp)
 //	WinUI::WmSize
 //	WM_SIZE
 //
+LRESULT WinUI::WmSizing(HWND hwnd, WPARAM edge, LPARAM lp)
+{
+    if (fullscreen) return FALSE;
+    RECT outer,client; GetWindowRect(hwnd,&outer); GetClientRect(hwnd,&client);
+    M88V::ConstrainScreen(*reinterpret_cast<RECT*>(lp),UINT(edge),
+        outer.right-outer.left-client.right,
+        outer.bottom-outer.top-client.bottom+winstatusdisplay.GetHeight(), dragWidth, dragHeight);
+    return TRUE;
+}
+
+LRESULT WinUI::WmGetMinMaxInfo(HWND hwnd, WPARAM, LPARAM lp)
+{
+    if (!fullscreen) {
+        RECT r={0,0,320,200+winstatusdisplay.GetHeight()};
+        AdjustWindowRectEx(&r,DWORD(GetWindowLongPtr(hwnd,GWL_STYLE)),TRUE,0);
+        auto limits=reinterpret_cast<MINMAXINFO*>(lp);
+        limits->ptMinTrackSize={r.right-r.left,r.bottom-r.top};
+    }
+    return 0;
+}
+
 LRESULT WinUI::WmSize(HWND hwnd, WPARAM wp, LPARAM lp)
 {
 	winstatusdisplay.Resize();
 	active = wp != SIZE_MINIMIZED;
 	draw.Activate(active);
+    if (!fullscreen && active) {
+        RECT client; GetClientRect(hwnd,&client);
+        int height=std::max(0L,client.bottom-winstatusdisplay.GetHeight());
+        draw.SetPresentation(client.right,height,scaleFilter);
+        if (wp != SIZE_MAXIMIZED) {
+            RECT fit=M88V::FitScreen(client.right,height);
+            screenWidth=fit.right-fit.left; screenHeight=fit.bottom-fit.top;
+        }
+        draw.RequestPaint();
+    }
 	return DefWindowProc(hwnd, WM_SIZE, wp, lp);
 }
 
@@ -1489,8 +1554,18 @@ void WinUI::ResizeWindow(uint width, uint height)
 	AdjustWindowRectEx(&rect, wstyle, TRUE, 0);
 	SetWindowPos(hwnd, 0, 0, 0, rect.right-rect.left, rect.bottom-rect.top,
 				 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-	PostMessage(hwnd, WM_SIZE, SIZE_RESTORED, MAKELONG(width, height));
-	draw.Resize( width, height );
+    // Adjust for a wrapped menu bar at small sizes (AdjustWindowRectEx assumes one row).
+    for (int attempt=0; attempt<2; ++attempt) {
+        RECT client, outer; GetClientRect(hwnd,&client); GetWindowRect(hwnd,&outer);
+        int dw=int(width)-client.right, dh=int(height)+winstatusdisplay.GetHeight()-client.bottom;
+        if (!dw && !dh) break;
+        SetWindowPos(hwnd,nullptr,0,0,outer.right-outer.left+dw,outer.bottom-outer.top+dh,
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    // The core framebuffer remains 640x400; window dimensions affect presentation only.
+    RECT client; GetClientRect(hwnd, &client);
+    draw.SetPresentation(client.right, std::max(0L, client.bottom-winstatusdisplay.GetHeight()), scaleFilter);
+    draw.RequestPaint();
 }
 
 // ---------------------------------------------------------------------------
@@ -1581,7 +1656,8 @@ void WinUI::ShowStatusWindow()
             winstatusdisplay.EnableMedia();
         }
         UpdateMediaStatus();
-		ResizeWindow(640, 400);
+        if (IsZoomed(hwnd)) WmSize(hwnd, SIZE_MAXIMIZED, 0);
+        else ResizeWindow(screenWidth, screenHeight);
 	}
 }
 
@@ -1652,13 +1728,13 @@ LRESULT WinUI::M88ChangeDisplay(HWND hwnd, WPARAM, LPARAM)
 
 	if (!fullscreen)
 	{
-		wstyle = (wstyle & ~WS_POPUP) | (WS_CAPTION | WS_OVERLAPPED | WS_SYSMENU);
+		wstyle = (wstyle & ~WS_POPUP) | (WS_CAPTION | WS_OVERLAPPED | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME | WS_CLIPCHILDREN);
 		exstyle &= ~WS_EX_TOPMOST;
 		
 //		SetCapture(hwnd);
 		SetWindowLongPtr(hwnd, GWL_STYLE, wstyle);
 		SetWindowLongPtr(hwnd, GWL_EXSTYLE, exstyle);
-		ResizeWindow(640, 400);
+		ResizeWindow(screenWidth, screenHeight);
 		SetWindowPos(hwnd, HWND_NOTOPMOST, point.x, point.y, 0, 0, SWP_NOSIZE);
 		ShowStatusWindow();
 		report = true;
@@ -1670,7 +1746,7 @@ LRESULT WinUI::M88ChangeDisplay(HWND hwnd, WPARAM, LPARAM)
 			SetGUIFlag(false);
 			
 //	ReleaseCapture();
-		wstyle = (wstyle & ~(WS_CAPTION | WS_OVERLAPPED | WS_SYSMENU)) | WS_POPUP;
+		wstyle = (wstyle & ~(WS_CAPTION | WS_OVERLAPPED | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME)) | WS_POPUP;
 		exstyle |= WS_EX_TOPMOST;
 		SetWindowLongPtr(hwnd, GWL_STYLE, wstyle);
 		SetWindowLongPtr(hwnd, GWL_EXSTYLE, exstyle);
@@ -1887,12 +1963,14 @@ LRESULT WinUI::WmRButtonUp(HWND hwnd, WPARAM wparam, LPARAM lparam)
 //
 LRESULT WinUI::WmEnterSizeMove(HWND hwnd, WPARAM, LPARAM)
 {
+    dragWidth=screenWidth; dragHeight=screenHeight;
 //	core.ActivateMouse(false);
 	return 0;
 }
 
 LRESULT WinUI::WmExitSizeMove(HWND hwnd, WPARAM, LPARAM)
 {
+    if (!fullscreen && !IsZoomed(hwnd)) ResizeWindow(screenWidth,screenHeight);
 //	core.ActivateMouse(true);
 	return 0;
 }

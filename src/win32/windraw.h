@@ -23,6 +23,7 @@ public:
 	virtual bool Init(HWND hwnd, uint w, uint h, GUID* display) = 0;
 	virtual bool Resize(uint width, uint height) { return false; }
 	virtual bool Cleanup() = 0;
+    virtual void SetPresentation(int width, int height, int filter) {}
 	virtual void SetPalette(PALETTEENTRY* pal, int index, int nentries) {}
 	virtual void QueryNewPalette() {}
 	virtual void DrawScreen(const RECT& rect, bool refresh) = 0;
@@ -57,6 +58,7 @@ public:
 	bool Unlock();
 	
 	void Resize(uint width, uint height);
+    void SetPresentation(int width, int height, int filter);
 	void SetPalette(uint index, uint nents, const Palette* pal);
 	void DrawScreen(const Region& region);
 
@@ -79,7 +81,7 @@ public:
 	int CaptureScreen(uint8* dest);
 
 private:
-	enum DisplayType { None, GDI, DDWin, DDFull, D2D };
+	enum DisplayType { None, GDI, DDWin, DDFull, D2D, Scaled };
 	void PaintWindow();
 
 	static BOOL WINAPI DDEnumCallback(GUID FAR* guid, LPSTR desc, LPSTR name, LPVOID context, HMONITOR hm);
@@ -107,8 +109,9 @@ private:
 	int drawcount;
 	int guicount;
 
-	int width;
-	int height;
+    int presentationWidth=640, presentationHeight=400, presentationFilter=0;
+	int width = 640;
+	int height = 400;
 
 	HWND hwnd;
 	HANDLE hevredraw;
