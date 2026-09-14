@@ -14,6 +14,7 @@
 #include "pc88/config.h"
 #include "winsound.h"
 #include "sequence.h"
+#include "headless/serial_port.h"
 #include "winjoy.h"
 
 namespace PC8801
@@ -38,6 +39,10 @@ public:
 			  const PC8801::Config& startupConfig);
 	bool Cleanup();
 
+    bool OpenSerial(const std::string& port,unsigned baud,unsigned bits,const std::string& parity,const std::string& stop,const std::string& flow,std::string& error);
+    void CloseSerial();
+    bool SerialActive();
+    std::string SerialStatus();
 	void Reset();
 	bool LoadBinary(const std::string& path, uint16_t address, std::string* message);
 	void ApplyConfig(PC8801::Config* config);
@@ -95,6 +100,8 @@ private:
 	IConfigPropBase* cfgprop;
 
 	Sequencer seq;
+    SerialPort serialPort;
+    TapeManager* serialTape = nullptr;
 	WinPadIF padif;
 
 	typedef vector<PC8801::ExtendModule*> ExtendModules;

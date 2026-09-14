@@ -1,12 +1,24 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, Mandatory)]
-    [ValidateSet("status", "registers", "reset", "run", "load", "tape", "key", "release", "capture", "memory", "dump", "shutdown")]
+    [ValidateSet("status", "registers", "reset", "run", "load", "tape", "disks", "disk-mount", "disk-unmount", "disk-select", "serial", "serial-open", "serial-ports", "serial-close", "serial-write", "serial-read", "serial-clear", "key", "release", "capture", "memory", "dump", "shutdown")]
     [string]$Command,
     [string]$ConnectionFile = "",
     [int]$Frames = 1,
     [string]$Bin = "",
     [string]$Tape = "",
+    [string]$Disk = "",
+    [ValidateRange(1,2)][int]$Drive = 1,
+    [ValidateRange(0,63)][int]$Index = 0,
+    [bool]$ReadOnly = $true,
+    [string]$ComPort = "",
+    [ValidateRange(1,4000000)][int]$Baud = 9600,
+    [ValidateRange(5,8)][int]$DataBits = 8,
+    [ValidateSet("none","odd","even")][string]$Parity = "none",
+    [ValidateSet("1","1.5","2")][string]$StopBits = "1",
+    [ValidateSet("none","rtscts")][string]$Flow = "none",
+    [string]$Hex = "",
+    [ValidateRange(1,4096)][int]$MaxBytes = 4096,
     [string]$Address = "C000H",
     [string]$Key = "",
     [bool]$Down = $true,
@@ -44,6 +56,31 @@ switch ($Command) {
         if (-not $Tape) { throw "-Tape is required for tape" }
         $absolute = (Resolve-Path -LiteralPath $Tape).Path
         Invoke-M88 POST ("/v1/tape/open?path=" + (Encode $absolute))
+    }
+    "disks" { Invoke-M88 GET "/v1/disks" }
+    "serial" { Invoke-M88 GET "/v1/serial/status" }
+    "serial-ports" { Invoke-M88 GET "/v1/serial/ports" }
+    "serial-open" {
+        $query = if ($ComPort) { "?port=$(Encode $ComPort)&baud=$Baud&data_bits=$DataBits&parity=$Parity&stop_bits=$StopBits&flow=$Flow" } else { "" }
+        Invoke-M88 POST ("/v1/serial/open"+$query)
+    }
+    "serial-close" { Invoke-M88 POST "/v1/serial/close" }
+    "serial-clear" { Invoke-M88 POST "/v1/serial/clear" }
+    "serial-read" { Invoke-M88 POST "/v1/serial/read?max=$MaxBytes" }
+    "serial-write" {
+        if ($Hex -notmatch '^(?:[0-9a-fA-F]{2}){1,4096}$') { throw '-Hex must contain 1 to 4096 complete hexadecimal bytes' }
+        Invoke-M88 POST ("/v1/serial/write?hex="+(Encode $Hex))
+    }
+    "disk-mount" {
+        if (-not $Disk) { throw "-Disk is required for disk-mount" }
+        $absolute = (Resolve-Path -LiteralPath $Disk).Path
+        $ro = if ($ReadOnly) { 1 } else { 0 }
+        Invoke-M88 POST ("/v1/disk/mount?drive=$Drive&index=$Index&readonly=$ro&path=" + (Encode $absolute))
+    }
+    "disk-unmount" { Invoke-M88 POST "/v1/disk/unmount?drive=$Drive" }
+    "disk-select" {
+        if (-not $PSBoundParameters.ContainsKey('Index')) { throw "-Index is required for disk-select" }
+        Invoke-M88 POST "/v1/disk/select?drive=$Drive&index=$Index"
     }
     "key" {
         if (-not $Key) { throw "-Key is required for key" }

@@ -49,6 +49,7 @@ void SIO::Reset(uint, uint)
 	if (tapeOutput) tapeOutput->SetSerial(false, outputType);
 	mode = clear;
 	status = TXRDY | TXE;
+	HostClear();
 	baseclock = 1200 * 64;
 }
 
@@ -106,6 +107,7 @@ void IOCALL SIO::SetControl(uint, uint d)
 			// Reset!
 			LOG0(" Internal Reset!\n");
 			mode = clear; rxen = txen = false;
+			if (hostEnabled) HostClear();
 			if (tapeOutput) tapeOutput->SetSerial(false, outputType);
 			break;
 		}
@@ -126,7 +128,8 @@ void IOCALL SIO::SetControl(uint, uint d)
 		// b1 - data terminal ready
 		// b0 - send enable
 		txen = (d & 1) != 0;
-		if (tapeOutput) tapeOutput->SetSerial(txen, outputType);
+		if (tapeOutput) tapeOutput->SetSerial(txen && !hostEnabled, outputType);
+		if (hostEnabled) PumpHost();
 
 		LOG2(" RxE:%d TxE:%d\n", rxen, txen);
 		break;
@@ -142,7 +145,14 @@ void IOCALL SIO::SetControl(uint, uint d)
 void IOCALL SIO::SetData(uint, uint d)
 {
 	LOG1("<%.2x ", d);
-	if (txen && tapeOutput) tapeOutput->WriteByte(d & ((1u << datalen) - 1));
+    if (!txen) return;
+    d &= (1u << datalen) - 1;
+    if (hostEnabled) {
+        if (hostTx.size() < HostCapacity) hostTx.push_back(uint8(d));
+        else ++hostDropped;
+        PumpHost();
+    } else if (tapeOutput) tapeOutput->WriteByte(d);
+
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +160,7 @@ void IOCALL SIO::SetData(uint, uint d)
 //
 uint IOCALL SIO::GetStatus(uint)
 {
+	if (hostEnabled) PumpHost();
 //	LOG1("!%.2x ", status      );
 	return status;
 }
@@ -164,14 +175,15 @@ uint IOCALL SIO::GetData(uint)
 	int f = status & RXRDY;
 	status &= ~RXRDY;
 
-	if (f)
-		bus->Out(prequest, 0);
-
-	return data;
+	const uint result = data;
+	if (hostEnabled) PumpHost();
+	else if (f) bus->Out(prequest, 0);
+	return result;
 }
 
 void IOCALL SIO::AcceptData(uint, uint d)
 {
+	if (hostEnabled) return; // The host endpoint exclusively owns this USART.
 	LOG1("Accept: [%.2x]", d);
 	if (rxen)
 	{
@@ -252,3 +264,40 @@ const Device::InFuncPtr SIO::indef[] =
 	STATIC_CAST(Device::InFuncPtr, &SIO::GetData),
 };
 
+
+void SIO::EnableHost(bool enabled) {
+    if (hostEnabled == enabled) return;
+    hostEnabled = enabled;
+    HostClear();
+    if (tapeOutput) tapeOutput->SetSerial(txen && !enabled, outputType);
+}
+void SIO::HostClear() {
+    hostRx.clear(); hostTx.clear(); hostDropped = 0;
+    status &= ~(RXRDY | OE | DSR);
+    status |= TXRDY | TXE;
+    data = 0;
+    if (hostEnabled) status |= DSR;
+}
+void SIO::PumpHost() {
+    status &= ~(TXRDY | TXE);
+    if (hostTx.size() < HostCapacity) status |= TXRDY;
+    if (hostTx.empty()) status |= TXE;
+    if (rxen && !(status & RXRDY) && !hostRx.empty()) {
+        data = hostRx.front() & ((1u << datalen) - 1);
+        hostRx.pop_front(); status |= RXRDY;
+        bus->Out(prxrdy, 1);
+    }
+}
+bool SIO::HostWrite(const std::vector<uint8>& bytes) {
+    if (!hostEnabled || bytes.size() > HostCapacity - HostRxPending()) return false;
+    hostRx.insert(hostRx.end(), bytes.begin(), bytes.end());
+    PumpHost(); return true;
+}
+std::vector<uint8> SIO::HostRead(size_t maximum) {
+    std::vector<uint8> result;
+    if (!hostEnabled) return result;
+    const size_t count = std::min(maximum, hostTx.size());
+    result.reserve(count);
+    for (size_t i=0; i<count; ++i) { result.push_back(hostTx.front()); hostTx.pop_front(); }
+    PumpHost(); return result;
+}

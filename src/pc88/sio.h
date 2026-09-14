@@ -9,6 +9,8 @@
 #pragma once
 
 #include "device.h"
+#include <deque>
+#include <vector>
 
 class Scheduler;
 class TapeManager;
@@ -30,6 +32,19 @@ public:
 	~SIO();
 	bool Init(IOBus* bus, uint prxrdy, uint prequest);
 	void SetTapeOutput(TapeManager* tape) { tapeOutput = tape; }
+    // Optional byte-oriented host endpoint; configured only while the VM is stopped.
+    static constexpr size_t HostCapacity = 65536;
+    void EnableHost(bool enabled);
+    bool HostEnabled() const { return hostEnabled; }
+    bool HostWrite(const std::vector<uint8>& bytes);
+    std::vector<uint8> HostRead(size_t maximum);
+    void HostClear();
+    size_t HostRxPending() const { return hostRx.size() + ((status & RXRDY) ? 1 : 0); }
+    size_t HostTxPending() const { return hostTx.size(); }
+    uint64_t HostDropped() const { return hostDropped; }
+    bool ReceiveEnabled() const { return rxen; }
+    bool TransmitEnabled() const { return txen; }
+
 
 	void IOCALL Reset(uint=0, uint=0);
 	void IOCALL SetControl(uint, uint d);
@@ -49,6 +64,10 @@ private:
 	enum Mode { clear=0, async, sync1, sync2, sync };
 	enum Parity { none='N', odd='O', even='E' };
 
+    bool hostEnabled = false;
+    std::deque<uint8> hostRx, hostTx;
+    uint64_t hostDropped = 0;
+    void PumpHost();
 	TapeManager* tapeOutput = nullptr;
 	uint outputType = 0xcc;
 	IOBus* bus;

@@ -143,7 +143,7 @@ if(M88M_BUILD_HEADLESS)
     add_executable(m88_headless
         src/headless/headless_draw.cpp
         src/headless/headless_machine.cpp
-        src/headless/checkpoints.cpp
+        src/headless/serial_port.cpp src/headless/checkpoints.cpp
         src/headless/http_server.cpp
         src/headless/matrix_keyboard.cpp
         src/headless/main.cpp
@@ -174,6 +174,9 @@ if(M88M_BUILD_HEADLESS)
         add_executable(screen_reset_test src/tests/screen_reset_test.cpp)
         target_link_libraries(screen_reset_test PRIVATE m88core)
         add_test(NAME screen_reset_test COMMAND screen_reset_test)
+        add_executable(serial_test src/tests/serial_test.cpp)
+        target_link_libraries(serial_test PRIVATE m88core)
+        add_test(NAME serial_test COMMAND serial_test)
         add_executable(tape_test src/tests/tape_test.cpp)
         target_link_libraries(tape_test PRIVATE m88core)
         add_test(NAME tape_test COMMAND tape_test)
@@ -182,7 +185,7 @@ if(M88M_BUILD_HEADLESS)
         add_test(NAME environment_test COMMAND environment_test)
         add_executable(binary_loader_test src/tests/binary_loader_test.cpp
             src/headless/headless_draw.cpp src/headless/headless_machine.cpp
-            src/headless/checkpoints.cpp src/headless/matrix_keyboard.cpp)
+            src/headless/serial_port.cpp src/headless/checkpoints.cpp src/headless/matrix_keyboard.cpp)
         target_link_libraries(binary_loader_test PRIVATE m88_development)
         add_test(NAME binary_loader_test COMMAND binary_loader_test)
         if(WIN32)
@@ -307,7 +310,7 @@ if(M88M_BUILD_GUI AND M88V_GUI_FRONTEND STREQUAL "win32")
     file(GLOB WIN32_FRONT_SRC src/win32/*.cpp)
     list(FILTER WIN32_FRONT_SRC EXCLUDE REGEX "(file|instthnk|keybconn|pch)\\.cpp$")
     add_executable(m88_win32 WIN32 ${WIN32_FRONT_SRC}
-        src/pc88/memview.cpp src/pc88/ioview.cpp src/win32/M88.rc)
+        src/pc88/memview.cpp src/pc88/ioview.cpp src/headless/serial_port.cpp src/win32/M88.rc)
     set_target_properties(m88_win32 PROPERTIES OUTPUT_NAME "m88v")
     add_executable(m88_writetag writetag.cpp)
     add_custom_command(TARGET m88_win32 POST_BUILD

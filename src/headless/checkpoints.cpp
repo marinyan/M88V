@@ -10,11 +10,13 @@ struct FrontendState {uint64_t frames=0;int32_t remaining=0;uint32_t version=1;s
 struct ReplayHeader {char magic[8];uint32_t stateSize,eventCount,crc;};
 }
 bool HeadlessMachine::CaptureState(std::vector<uint8_t>& bytes,std::string& error) {
+    if (Serial().HostEnabled()) { error="Close the host serial endpoint before checkpointing or recording"; return false; }
     FrontendState f{frameCount_,frameRemaining_,1,keyboard_.Rows()};
     std::vector<uint8_t> front(sizeof(f));std::memcpy(front.data(),&f,sizeof(f));
     return M88V::Snapshot::Capture(*this,config_,romIdentity_,front,bytes,error);
 }
 bool HeadlessMachine::RestoreState(const std::vector<uint8_t>& bytes,std::string& error) {
+    if (Serial().HostEnabled()) { error="Close the host serial endpoint before restoring or replaying"; return false; }
     // Inspect the fixed frontend trailer before the core can be changed.
     if(bytes.size()<sizeof(FrontendState)){error="Missing headless checkpoint metadata";return false;}
     FrontendState f{};std::memcpy(&f,bytes.data()+bytes.size()-sizeof(f),sizeof(f));

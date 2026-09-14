@@ -117,6 +117,7 @@ bool HeadlessMachine::Initialize(const std::string& romDirectory, const std::str
 
 void HeadlessMachine::ResetMachine() {
     if (!initialized_) return;
+    if (com_.Connected()) { com_.Close(); Serial().EnableHost(false); }
     keyboard_.ReleaseAll();
     debugger_.Clear();
     ApplyConfig(&config_);
@@ -138,11 +139,13 @@ bool HeadlessMachine::RunFrames(uint32_t frames, std::string* error) {
     }
     if (recording_ && (inputEvents_.size()>=50000 || recordedFrames_+frames>100000)) { if(error)*error="Input recording limit reached (50000 events / 100000 frames); stop recording";return false; }
     for (uint32_t i = 0; i < frames && !debugger_.Stopped(); ++i) {
+        PumpSerial();
         if (!frameRemaining_) {
             TimeSync();
             frameRemaining_ = GetFramePeriod();
         }
         frameRemaining_ -= Proceed(static_cast<uint>(frameRemaining_), static_cast<uint>(config_.clock), static_cast<uint>(config_.clock));
+        PumpSerial();
         diskManager_.Update();
         UpdateScreen(true);
         if (frameRemaining_ <= 0) { frameRemaining_ = 0; ++frameCount_; debugger_.FrameEnd(); }
@@ -208,6 +211,70 @@ bool HeadlessMachine::OpenTape(const std::string& path, std::string* error) {
         return false;
     }
     return true;
+}
+
+HeadlessMachine::DiskStatus HeadlessMachine::GetDiskStatus(unsigned drive) const {
+    DiskStatus result;
+    if (drive>=DiskManager::max_drives) return result;
+    auto& disks=const_cast<DiskManager&>(diskManager_);
+    CriticalSection::Lock lock(disks.GetCS());
+    result.mounted=disks.GetFDU(drive)->IsMounted();
+    result.path=disks.GetImagePath(drive);
+    result.count=disks.GetNumDisks(drive);
+    result.index=result.mounted ? disks.GetCurrentDisk(drive) : -1;
+    result.readOnly=result.mounted && (disks.GetFDU(drive)->SenceDeviceStatus() & 0x40);
+    result.requestedReadOnly=diskReadOnly_[drive];
+    return result;
+}
+
+bool HeadlessMachine::MountDisk(unsigned drive, const std::string& path, unsigned index, bool readOnly, std::string& error) {
+    if (!initialized_ || drive>=DiskManager::max_drives || recording_) {
+        error="invalid drive, uninitialized machine or active input recording"; return false;
+    }
+    if (path.empty() || path.find('\0')!=std::string::npos || index>=DiskImageHolder::max_disks) {
+        error="provide an image path and index from 0 to 63"; return false;
+    }
+    std::error_code ec;
+    const auto canonical=fs::canonical(fs::u8path(path),ec);
+    if (ec || !fs::is_regular_file(canonical,ec) || ec) { error="disk image file not found"; return false; }
+    std::string absolute=canonical.u8string();
+    if (absolute.size()>=MAX_PATH) { error="disk image path is too long"; return false; }
+    const auto other=GetDiskStatus(1-drive);
+    if (other.mounted && fs::equivalent(canonical,fs::u8path(other.path),ec) && !ec) {
+        if (unsigned(other.index)==index) { error="this disk is already mounted in the other drive"; return false; }
+        if (other.requestedReadOnly!=readOnly) { error="drives sharing an image must use the same readonly option"; return false; }
+        absolute=other.path; // Match the existing holder even through a path alias.
+    }
+    // Validate with an independent read-only drive before replacing current media.
+    {
+        DiskManager probe;
+        if (!probe.Init() || !probe.Mount(0,absolute.c_str(),true,int(index),false) ||
+            !probe.GetFDU(0)->IsMounted()) {
+            error="cannot read disk image or index is out of range"; return false;
+        }
+    }
+    if (!diskManager_.Unmount(drive)) { error="failed to save previous disk while unmounting"; return false; }
+    if (!diskManager_.Mount(drive,absolute.c_str(),readOnly,int(index),false)) {
+        error="disk mount failed after removing previous media"; return false;
+    }
+    diskReadOnly_[drive]=readOnly;
+    return true;
+}
+
+bool HeadlessMachine::UnmountDisk(unsigned drive, std::string& error) {
+    if (!initialized_ || drive>=DiskManager::max_drives || recording_) {
+        error="invalid drive, uninitialized machine or active input recording"; return false;
+    }
+    if (!diskManager_.Unmount(drive)) { error="failed to save disk while unmounting"; return false; }
+    diskReadOnly_[drive]=true;
+    return true;
+}
+
+bool HeadlessMachine::SelectDisk(unsigned drive, unsigned index, std::string& error) {
+    const auto disk=GetDiskStatus(drive);
+    if (!disk.mounted) { error="drive has no mounted image"; return false; }
+    if (index>=disk.count) { error="disk index is out of range"; return false; }
+    return MountDisk(drive,disk.path,index,disk.requestedReadOnly,error);
 }
 
 HeadlessMachine::Registers HeadlessMachine::GetRegisters() const {
