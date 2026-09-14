@@ -72,6 +72,7 @@ headless 版を [ビルド](#ビルドと検証) してから、PowerShell 7 で
 | --- | --- |
 | 対応する機種・BASIC モード、必要な ROM、環境変数 | [機種・ROM・起動設定](docs/SETUP-ja.md) |
 | T88 の作成・再生、CMT 出力の保存 | [テープ操作](docs/TAPE-ja.md) |
+| ディスク・テープ名とアクセスランプの試作 | [メディア状態バー](docs/MEDIA_STATUS-ja.md) |
 | API、BIN ロード、キー入力、画面・メモリ取得 | [ローカル API](docs/HEADLESS_API-ja.md) |
 | 計測、ウォッチ、状態保存、入力記録・再生 | [開発ツール](docs/DEVELOPMENT_TOOLS-ja.md) |
 | Windows GUI の構成、設定、raylib 版のビルド | [Windows GUI](docs/NATIVE_WINDOWS-ja.md) |

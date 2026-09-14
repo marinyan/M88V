@@ -8,6 +8,7 @@
 
 #include "types.h"
 #include "critsect.h"
+#include "media_bar.h"
 
 class WinStatusDisplay
 {
@@ -20,7 +21,11 @@ public:
 
 	bool Enable(bool sfs=false);
 	bool Disable();
-	int GetHeight() { return height; }
+	int GetHeight() { return height + media.Height(); }
+    void EnableMedia() { media.Create(hwndparent); Resize(); }
+    void Resize();
+    void UpdateMedia(const std::array<MediaSlot, 3>& value) { media.Update(value); }
+    bool HasMediaBar() const { return media.IsOpen(); }
 	void DrawItem(DRAWITEMSTRUCT* dis);
 	void FDAccess(uint dr, bool hd, bool active);
 	void UpdateDisplay();
@@ -50,6 +55,7 @@ private:
 
 	void Clean();
 	
+	MediaBar media;
 	HWND hwnd;
 	HWND hwndparent;
 	List* list;

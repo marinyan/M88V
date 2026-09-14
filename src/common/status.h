@@ -43,9 +43,13 @@ public:
 
     // FD access lamp state for drive `dr` (0..3). bit0=on, bit1=hd-mode hint.
     int  GetFDState(uint dr) const;
+    // Monotonic UI counters retain short transfers between frontend polls.
+    void TapeAccess(bool recording);
+    uint GetMediaActivity(uint slot) const; // FD1, FD2, tape read, tape write
 
 private:
     mutable CriticalSection cs_;
+    uint mediaActivity_[4] = {};
 
     char    msg_[128];
     int     priority_;

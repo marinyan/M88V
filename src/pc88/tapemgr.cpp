@@ -315,6 +315,7 @@ void TapeManager::SetTimer(int count)
 inline void TapeManager::Send(uint byte)
 {
 	LOG1("%.2x ", byte);
+	statusdisplay.TapeAccess(false);
 	bus->Out(pinput, byte);
 }
 
@@ -466,6 +467,7 @@ void TapeManager::SetSerial(bool enabled, uint type)
 void TapeManager::WriteByte(uint byte)
 {
     if (!OutputActive()) return;
+    statusdisplay.TapeAccess(true);
     uint now = scheduler ? scheduler->GetTime() : 0;
     uint ticks = outputControl & 0x10 ? 44 : 88;
     uint elapsed = uint((uint64_t(uint(now - recordTime)) * 6) / 125);

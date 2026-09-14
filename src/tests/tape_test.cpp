@@ -3,6 +3,7 @@
 #include "headers.h"
 #include "pc88/tapemgr.h"
 #include "pc88/sio.h"
+#include "common/status.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -40,13 +41,20 @@ int main() {
         sio.Init(&bus, 1, 2);
         bus.ConnectOut(0, &sio, static_cast<Device::OutFuncPtr>(&PC8801::SIO::AcceptData));
         sio.SetTapeOutput(&tape);
+        uint readActivity = statusdisplay.GetMediaActivity(2);
+        uint writeActivity = statusdisplay.GetMediaActivity(3);
         sio.Reset(); sio.SetControl(0, 0xce); sio.SetControl(0, 1);
         sio.SetData(0, 99); // Motor off must not record.
         Check(!tape.HasRecording(), "motor gate");
+        Check(statusdisplay.GetMediaActivity(3) == writeActivity, "no false recording activity");
+        statusdisplay.FDAccess(0, false, true);
+        statusdisplay.FDAccess(0, false, false);
+        Check(statusdisplay.GetFDState(0) == 0 && statusdisplay.GetMediaActivity(0) > 0, "short disk pulse retained");
         tape.Out30(0, 0x18); // CMT 1200, mark carrier, motor on.
         clock.Proceed(100000); // 4800 ticks of leader.
         sio.SetData(0, 0x3a);
         sio.SetData(0, 0x80);
+        Check(statusdisplay.GetMediaActivity(3) == writeActivity + 2, "recording activity counter");
         tape.Out30(0, 0x10);
         Check(tape.SaveRecording(image.c_str()), "save T88");
         Check(tape.SaveRecording(raw.c_str(), true), "save CMT");
@@ -70,6 +78,7 @@ int main() {
         Check((sio.GetStatus() & 2) && sio.GetData() == 0x3a, "first replayed byte");
         clock.Proceed(916);
         Check((sio.GetStatus() & 2) && sio.GetData() == 0x80, "second replayed byte");
+        Check(statusdisplay.GetMediaActivity(2) == readActivity + 2, "playback activity counter");
         clock.Proceed(1000);
         Check(!(sio.GetStatus() & 2), "end does not repeat data");
         tape.Motor(false);

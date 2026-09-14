@@ -24,6 +24,19 @@ void StatusDisplay::FDAccess(uint dr, bool hd, bool active)
     if (dr >= 2) return;
     CriticalSection::Lock lock(cs_);
     litstat_[dr] = active ? (hd ? 2 : 1) : 0;
+    if (active) ++mediaActivity_[dr];
+}
+
+void StatusDisplay::TapeAccess(bool recording)
+{
+    CriticalSection::Lock lock(cs_);
+    ++mediaActivity_[recording ? 3 : 2];
+}
+
+uint StatusDisplay::GetMediaActivity(uint slot) const
+{
+    CriticalSection::Lock lock(cs_);
+    return slot < 4 ? mediaActivity_[slot] : 0;
 }
 
 bool StatusDisplay::Show(int priority, int duration, const char* msg, ...)

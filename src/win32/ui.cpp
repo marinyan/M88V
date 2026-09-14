@@ -18,6 +18,7 @@
 #include "error.h"
 #include "88config.h"
 #include "status.h"
+#include "../common/status.h"
 #include "pc88/opnif.h"
 #include "pc88/diskmgr.h"
 #include "pc88/tapemgr.h"
@@ -869,6 +870,11 @@ LRESULT WinUI::WmClose(HWND hwnd, WPARAM wparam, LPARAM lparam)
 //
 LRESULT WinUI::WmTimer(HWND hwnd, WPARAM wparam, LPARAM lparam)
 {
+    if (wparam == MediaBar::TimerID) {
+        UpdateMediaStatus();
+        winstatusdisplay.UpdateDisplay();
+        return 0;
+    }
 	winstatusdisplay.UpdateDisplay();
 	LOG2("WmTimer:%d(%d)\n", wparam, timerid);
 	if (wparam == timerid)
@@ -977,9 +983,7 @@ LRESULT WinUI::WmInitMenu(HWND hwnd, WPARAM wp, LPARAM lp)
 //
 LRESULT WinUI::WmSize(HWND hwnd, WPARAM wp, LPARAM lp)
 {
-	HWND hwndstatus = winstatusdisplay.GetHWnd();
-	if (hwndstatus)
-		PostMessage(hwndstatus, WM_SIZE, wp, lp);
+	winstatusdisplay.Resize();
 	active = wp != SIZE_MINIMIZED;
 	draw.Activate(active);
 	return DefWindowProc(hwnd, WM_SIZE, wp, lp);
@@ -1373,7 +1377,7 @@ void WinUI::TapeCommand(uint command)
     if (command == IDM_TAPE_REWIND) { tapemgr->Rewind(); return; }
     if (command == IDM_TAPE_END) { tapemgr->SeekEnd(); return; }
     if (command == IDM_TAPE_EJECT) {
-        tapemgr->Close(); tapetitle[0] = 0;
+        tapemgr->Close(); tapetitle[0] = tapepath[0] = 0;
         ModifyMenu(GetMenu(hwnd), IDM_TAPE, MF_BYCOMMAND | MF_STRING, IDM_TAPE, "&Open...");
         return;
     }
@@ -1419,6 +1423,7 @@ void WinUI::OpenTapeImage(const char* filename)
 	if (tapemgr->Open(filename))
 	{
 		GetFileNameTitle(tapetitle, sizeof(tapetitle), filename);
+        strcpy_s(tapepath, filename);
 		wsprintf(buf, "&Open - %s...", tapetitle);
 		mii.dwTypeData = buf;
 	}
@@ -1450,14 +1455,91 @@ void WinUI::ResizeWindow(uint width, uint height)
 // ---------------------------------------------------------------------------
 //	ステータスバー表示切り替え
 //
+namespace {
+std::wstring MediaText(const char* text, UINT codepage = CP_ACP)
+{
+    if (!text || !*text) return {};
+    int size = MultiByteToWideChar(codepage, 0, text, -1, nullptr, 0);
+    if (size <= 1) return {};
+    std::wstring result(size, L'\0');
+    MultiByteToWideChar(codepage, 0, text, -1, &result[0], size);
+    result.resize(size-1); return result;
+}
+std::wstring MediaFileName(const char* path)
+{
+    auto text = MediaText(path);
+    auto slash = text.find_last_of(L"/\\");
+    return slash == std::wstring::npos ? text : text.substr(slash+1);
+}
+}
+
+void WinUI::UpdateMediaStatus()
+{
+    if (!diskmgr || !tapemgr || !winstatusdisplay.HasMediaBar()) return;
+    std::array<MediaSlot, 3> slots;
+    ULONGLONG now = GetTickCount64();
+    for (uint i = 0; i < 4; ++i) {
+        uint sequence = statusdisplay.GetMediaActivity(i);
+        if (mediaSeen[i] != sequence) { mediaSeen[i] = sequence; mediaUntil[i] = now + 180; }
+    }
+    // Copy a coherent view while holding the core lock; paint only after releasing it.
+    core.Lock();
+    {
+        CriticalSection::Lock diskLock(diskmgr->GetCS());
+        for (uint drive = 0; drive < 2; ++drive) {
+            int index = diskmgr->GetCurrentDisk(drive);
+            if (index < 0) continue;
+            slots[drive].mounted = true;
+            slots[drive].name = MediaFileName(diskmgr->GetImagePath(drive));
+            slots[drive].fullName = MediaText(diskmgr->GetImagePath(drive));
+            auto title = MediaText(diskmgr->GetImageTitle(drive, index), 932);
+            if (!title.empty()) {
+                slots[drive].name += L" / " + title;
+                slots[drive].fullName += L"\n" + title;
+            }
+            bool access = mediaUntil[drive] > now || statusdisplay.GetFDState(drive) != 0;
+            slots[drive].lamp = access ? 1 : 0;
+            slots[drive].detail = access ? L"ACCESS" : L"READY";
+            uint count = diskmgr->GetNumDisks(drive);
+            if (count > 1) slots[drive].detail += L" " + std::to_wstring(index+1) + L"/" + std::to_wstring(count);
+        }
+    }
+    auto& tape = slots[2];
+    tape.mounted = tapemgr->IsOpen();
+    if (tape.mounted) { tape.name = MediaText(tapetitle); tape.fullName = MediaText(tapepath); }
+    bool output = tapemgr->IsOutputActive();
+    if (!tape.mounted && (output || tapemgr->HasRecording())) {
+        tape.name = L"Recording buffer"; tape.mounted = true;
+    }
+    bool recordingPulse = mediaUntil[3] > now;
+    bool readingPulse = mediaUntil[2] > now && tapemgr->IsOpen();
+    tape.lamp = recordingPulse ? 2 : readingPulse ? 1 : 0;
+    tape.detail = output ? L"REC" : !tapemgr->IsOpen() ? L"NO TAPE" :
+        tapemgr->IsAtEnd() ? L"END" : tapemgr->IsMotorOn() ? L"PLAY" : L"STOP";
+    if (tapemgr->IsOpen()) {
+        uint seconds = tapemgr->GetPos() / 4800;
+        wchar_t position[32]; swprintf_s(position, L" %02u:%02u", seconds/60, seconds%60);
+        tape.detail += position;
+    }
+    if (tapemgr->RecordingDirty()) {
+        tape.name += L" *";
+        tape.fullName += L"\nUnsaved cassette output (Tape > Save recording as).";
+    }
+    core.Unlock();
+    winstatusdisplay.UpdateMedia(slots);
+}
+
 void WinUI::ShowStatusWindow()
 {
 	if (!fullscreen)
 	{
 		if (config.flags & PC8801::Config::showstatusbar)
 			winstatusdisplay.Enable((config.flags & PC8801::Config::showfdcstatus) != 0);
-		else
-			winstatusdisplay.Disable();
+		else {
+            winstatusdisplay.Disable();
+            winstatusdisplay.EnableMedia();
+        }
+        UpdateMediaStatus();
 		ResizeWindow(640, 400);
 	}
 }
