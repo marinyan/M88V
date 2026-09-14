@@ -6,6 +6,7 @@
 
 #include "headers.h"
 #include "status.h"
+#include <algorithm>
 #include "../common/status.h"
 
 //#define LOGNAME "status"
@@ -50,6 +51,7 @@ bool WinStatusDisplay::Init(HWND hwndp)
 
 bool WinStatusDisplay::Enable(bool showfd)
 {
+    EnableMedia();
 	if (!hwnd)
 	{
 		hwnd = CreateStatusWindow(WS_CHILD | WS_VISIBLE, 0, hwndparent, 1);
@@ -75,11 +77,13 @@ bool WinStatusDisplay::Enable(bool showfd)
 	
 		PostMessage(hwnd,  SB_SETTEXT, SBT_OWNERDRAW | 1, 0);
 	}
+    Resize();
 	return true;
 }
 
 bool WinStatusDisplay::Disable()
 {
+    media.Destroy();
 	if (hwnd)
 	{
 		DestroyWindow(hwnd);
@@ -87,6 +91,18 @@ bool WinStatusDisplay::Disable()
 		height = 0;
 	}
 	return true;
+}
+
+void WinStatusDisplay::Resize()
+{
+    if (hwnd) {
+        SendMessage(hwnd, WM_SIZE, 0, 0);
+        RECT rect; GetClientRect(hwndparent, &rect);
+        int parts[] = {std::max(0, int(rect.right) - (showfdstat ? 84 : 68)), -1};
+        SendMessage(hwnd, SB_SETPARTS, 2, reinterpret_cast<LPARAM>(parts));
+        GetWindowRect(hwnd, &rect); height = rect.bottom - rect.top;
+    }
+    media.Resize(height);
 }
 
 void WinStatusDisplay::Cleanup()

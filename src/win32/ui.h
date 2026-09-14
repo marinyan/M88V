@@ -76,6 +76,7 @@ private:
 	void OpenTapeImage(const char* filename);
 
 	void ShowStatusWindow();
+    void UpdateMediaStatus();
 	void ResizeWindow(uint width, uint height);
 	void SetGUIFlag(bool);
 
@@ -116,6 +117,9 @@ private:
 	// disk
 	DiskInfo diskinfo[2];
 	char tapetitle[MAX_PATH];
+    char tapepath[MAX_PATH] = {};
+    uint mediaSeen[4] = {};
+    ULONGLONG mediaUntil[4] = {};
 	
 	// snapshot 関係
 	HMENU hmenuss[2];

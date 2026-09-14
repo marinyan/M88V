@@ -44,6 +44,9 @@ public:
     void WriteByte(uint byte);
 
 	bool IsOpen() { return !!tags; }
+    bool IsMotorOn() const { return motor; }
+    bool IsOutputActive() const { return OutputActive(); }
+    bool IsAtEnd() const { return tags && !pos && !datasize; }
 
 	bool Motor(bool on);
 	bool Carrier();
