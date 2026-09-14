@@ -364,6 +364,7 @@ LRESULT WinUI::WinProc(HWND hwnd, UINT umsg, WPARAM wp, LPARAM lp)
 	PROC_MSG(WM_PALETTECHANGED,		WmPaletteChanged);
 	PROC_MSG(WM_QUERYNEWPALETTE,	WmQueryNewPalette);
 	PROC_MSG(WM_INITMENU,			WmInitMenu);
+    PROC_MSG(MediaBar::MenuMessage, WmMediaMenu);
 	PROC_MSG(WM_KEYUP,				WmKeyUp);
 	PROC_MSG(WM_KEYDOWN,			WmKeyDown);
 	PROC_MSG(WM_SYSKEYUP,			WmSysKeyUp);
@@ -923,6 +924,46 @@ LRESULT WinUI::WmTimer(HWND hwnd, WPARAM wparam, LPARAM lparam)
 //	WinUI::WmInitMenu
 //	WM_INITMENU ハンドラ
 //
+namespace {
+HMENU FindCommandMenu(HMENU menu, UINT command)
+{
+    for (int i=0; i<GetMenuItemCount(menu); ++i) {
+        if (GetMenuItemID(menu, i) == command) return menu;
+        HMENU child = GetSubMenu(menu, i);
+        if (child) { HMENU found = FindCommandMenu(child, command); if (found) return found; }
+    }
+    return nullptr;
+}
+}
+
+LRESULT WinUI::WmMediaMenu(HWND owner, WPARAM slot, LPARAM location)
+{
+    if (slot > 2 || fullscreen || !winstatusdisplay.HasMediaBar()) return 0;
+    // Read the current menu at click time: switching disk images recreates it.
+    HMENU menu = nullptr;
+    if (slot < 2) {
+        MENUITEMINFO item = {}; item.cbSize = sizeof(item); item.fMask = MIIM_SUBMENU;
+        if (GetMenuItemInfo(GetMenu(owner), slot == 0 ? IDM_DRIVE_1 : IDM_DRIVE_2, FALSE, &item))
+            menu = item.hSubMenu;
+    } else menu = FindCommandMenu(GetMenu(owner), IDM_TAPE);
+    bool temporary = false;
+    if (slot < 2 && !IsMenu(menu)) {
+        menu = CreatePopupMenu(); temporary = true;
+        if (menu) AppendMenuW(menu, MF_STRING, slot == 0 ? IDM_DRIVE_1 : IDM_DRIVE_2, L"&Open disk image...");
+    }
+    if (!IsMenu(menu)) return 0;
+    keyif.Activate(false);
+    SetGUIFlag(true);
+    UINT command = TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN | TPM_BOTTOMALIGN,
+        static_cast<short>(LOWORD(location)), static_cast<short>(HIWORD(location)), owner, nullptr);
+    if (temporary) DestroyMenu(menu);
+    keyif.Activate(true);
+    SetGUIFlag(false);
+    // Dispatch after the popup closes; changing images may destroy the old menu.
+    if (command) PostMessage(owner, WM_COMMAND, MAKEWPARAM(command, 0), 0);
+    return 0;
+}
+
 LRESULT WinUI::WmInitMenu(HWND hwnd, WPARAM wp, LPARAM lp)
 {
 	HMENU hmenu = (HMENU) wp;

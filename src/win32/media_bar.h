@@ -22,6 +22,7 @@ void DrawMediaBar(HDC dc, RECT bounds, const std::array<MediaSlot, 3>& slots, UI
 class MediaBar {
 public:
     static constexpr UINT TimerID = 10;
+    static constexpr UINT MenuMessage = WM_APP + 0x310;
     bool Create(HWND parent);
     void Destroy();
     void Resize(int statusHeight);
@@ -31,6 +32,8 @@ public:
 private:
     static LRESULT CALLBACK WindowProc(HWND, UINT, WPARAM, LPARAM);
     void UpdateTooltips();
+    int HitTest(POINT point) const;
+    int pressedSlot = -1;
     HWND window = nullptr, parent = nullptr;
     HWND tooltip = nullptr;
     UINT dpi = 96;
