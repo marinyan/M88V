@@ -93,6 +93,26 @@ BEGIN
         MENUITEM "&Save recording as...",        IDM_TAPE_SAVE
         MENUITEM "&Clear recording...",          IDM_TAPE_CLEAR
     END
+    POPUP "&Display"
+    BEGIN
+        POPUP "&Scale"
+        BEGIN
+            MENUITEM "50%", IDM_SCALE_50
+            MENUITEM "100%", IDM_SCALE_100
+            MENUITEM "150%", IDM_SCALE_150
+            MENUITEM "200%", IDM_SCALE_200
+            MENUITEM "250%", IDM_SCALE_250
+            MENUITEM "300%", IDM_SCALE_300
+            MENUITEM "350%", IDM_SCALE_350
+            MENUITEM "400%", IDM_SCALE_400
+        END
+        POPUP "&Interpolation"
+        BEGIN
+            MENUITEM "&Nearest neighbor", IDM_FILTER_NEAREST
+            MENUITEM "&Bilinear", IDM_FILTER_BILINEAR
+            MENUITEM "Bi&cubic", IDM_FILTER_BICUBIC
+        END
+    END
     POPUP "&Tools"
     BEGIN
         MENUITEM "&Configure...",               IDM_CONFIG

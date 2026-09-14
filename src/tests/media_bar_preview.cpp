@@ -9,9 +9,9 @@ void Check(bool value, const char* message) { if (!value) throw std::runtime_err
 int main()
 {
     try {
-        // Hidden parent: verify footer sizing without ROMs or an interactive desktop.
-        HWND parent = CreateWindowW(L"STATIC", L"Media layout test", WS_POPUP,
-            0, 0, 640, 500, nullptr, nullptr, GetModuleHandle(nullptr), nullptr);
+        // Offscreen, non-activating window: hidden windows discard paint regions.
+        HWND parent = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, L"STATIC", L"Media layout test", WS_POPUP | WS_VISIBLE,
+            -30000, -30000, 640, 500, nullptr, nullptr, GetModuleHandle(nullptr), nullptr);
         Check(parent != nullptr, "create parent");
         MediaBar bar;
         Check(bar.Create(parent) && bar.Create(parent), "create is idempotent");
@@ -19,6 +19,7 @@ int main()
         HWND child = FindWindowExW(parent, nullptr, L"M88VMediaBar", nullptr);
         Check(child != nullptr, "media child exists");
         RECT bounds; GetWindowRect(child, &bounds);
+        MapWindowPoints(nullptr,parent,reinterpret_cast<POINT*>(&bounds),2);
         Check(bounds.right-bounds.left == 640 && bounds.bottom == 480 && bounds.bottom-bounds.top == bar.Height(), "footer avoids status row");
         auto click = [&](int downX, int upX, int expected) {
             SendMessage(child, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(downX, 12));
@@ -34,11 +35,27 @@ int main()
         click(639, 639, 2);
         click(20, 300, -1); // Moving to another slot cancels.
         click(20, -1, -1);  // Releasing outside the bar cancels.
-        SetWindowPos(parent, nullptr, 0, 0, 800, 600, SWP_NOZORDER | SWP_NOACTIVATE);
+        ValidateRect(child, nullptr);
+        SetWindowPos(parent, nullptr, 0, 0, 800, 600, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         bar.Resize(0); GetWindowRect(child, &bounds);
+        MapWindowPoints(nullptr,parent,reinterpret_cast<POINT*>(&bounds),2);
         Check(bounds.right-bounds.left == 800 && bounds.bottom == 600, "footer resizes without status row");
+        RECT dirty, client;
+        GetClientRect(child, &client);
+        bool pending=!!GetUpdateRect(child, &dirty, FALSE);
+        Check(pending && EqualRect(&dirty, &client), "resize repaints all slots including old label positions");
         click(266, 266, 1);
         click(533, 533, 2);
+        for (int width : {1280,320,960,640}) {
+            ValidateRect(child,nullptr);
+            SetWindowPos(parent,nullptr,0,0,width,600,SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+            bar.Resize(0);
+            GetClientRect(child,&client);
+            Check(GetUpdateRect(child,&dirty,FALSE) && EqualRect(&dirty,&client),"grow and shrink repaint the entire footer");
+            click(width/6,width/6,0);
+            click(width/2,width/2,1);
+            click(width*5/6,width*5/6,2);
+        }
         bar.Destroy(); Check(!bar.IsOpen() && bar.Height() == 0 && !IsWindow(child), "hide footer");
         Check(bar.Create(parent), "restore footer after fullscreen");
         bar.Destroy(); DestroyWindow(parent);

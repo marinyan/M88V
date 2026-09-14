@@ -13,6 +13,7 @@
 #include "drawdds.h"
 #include "drawddw.h"
 #include "drawd2d.h"
+#include "draw_scaled.h"
 #include "messages.h"
 #include "error.h"
 #include "status.h"
@@ -83,11 +84,15 @@ bool WinDraw::Init0(HWND hwindow)
 
 bool WinDraw::Init(uint w, uint h, uint /*bpp*/)
 {
+    CriticalSection::Lock lock(csdraw);
 	width = w;
 	height = h;
 	shouldterminate = false;
 	active = true;
-	return true;
+    // The UI creates the renderer before the core initializes its framebuffer.
+    // Reconcile the source allocation here; presentation sizes never allocate it.
+    drawing = false;
+    return !draw || draw->Resize(w, h);
 }
 
 // ---------------------------------------------------------------------------
@@ -290,6 +295,14 @@ bool WinDraw::Unlock()
 // ---------------------------------------------------------------------------
 //	画面サイズを変える
 //
+void WinDraw::SetPresentation(int w, int h, int filter)
+{
+    CriticalSection::Lock lock(csdraw);
+    presentationWidth=w; presentationHeight=h; presentationFilter=filter;
+    if (draw) draw->SetPresentation(w,h,filter);
+    drawall=true;
+}
+
 void WinDraw::Resize(uint w, uint h)
 {
 //	winstatusdisplay.Show(50, 2500, "Resize (%d, %d)", width, height);
@@ -316,7 +329,7 @@ void WinDraw::WindowMoved(int x, int y)
 //
 bool WinDraw::ChangeDisplayMode(bool fullscreen, bool force480)
 {
-	DisplayType type = fullscreen ? DDFull : D2D;
+	DisplayType type = fullscreen ? DDFull : Scaled;
 
 	// 現在窓(M88)が所属するモニタの GUID を取得
 	memset(&gmonitor, 0, sizeof(gmonitor));
@@ -347,6 +360,9 @@ bool WinDraw::ChangeDisplayMode(bool fullscreen, bool force480)
 		case DDFull:
 			newdraw = new WinDrawDDS(force480);
 			break;
+        case Scaled:
+            newdraw = new WinDrawScaled;
+            break;
 		case D2D:
 			newdraw = new WinDrawD2D;
 			break;
@@ -373,6 +389,7 @@ bool WinDraw::ChangeDisplayMode(bool fullscreen, bool force480)
 		
 		if (newdraw)
 		{
+            newdraw->SetPresentation(presentationWidth, presentationHeight, presentationFilter);
 			newdraw->SetFlipMode(flipmode);
 			newdraw->SetGUIMode(false);
 		}

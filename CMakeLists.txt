@@ -186,6 +186,23 @@ if(M88M_BUILD_HEADLESS)
         target_link_libraries(binary_loader_test PRIVATE m88_development)
         add_test(NAME binary_loader_test COMMAND binary_loader_test)
         if(WIN32)
+            add_executable(native_draw_startup_test src/tests/native_draw_startup_test.cpp
+                src/win32/windraw.cpp src/win32/drawgdi.cpp src/win32/DrawDDS.cpp
+                src/win32/drawddw.cpp src/win32/drawd2d.cpp src/win32/draw_scaled.cpp
+                src/win32/screen_presenter.cpp src/win32/status.cpp src/win32/media_bar.cpp
+                src/win32/winexapi.cpp src/win32/winvars.cpp)
+            target_include_directories(native_draw_startup_test BEFORE PRIVATE src/win32)
+            target_compile_definitions(native_draw_startup_test PRIVATE M88_NATIVE_WIN32 NOMINMAX)
+            target_link_libraries(native_draw_startup_test PRIVATE m88core user32 gdi32 gdiplus comctl32 winmm d2d1 dxguid)
+            if(MSVC)
+                target_compile_options(native_draw_startup_test PRIVATE /source-charset:utf-8 /execution-charset:.932)
+            endif()
+            add_test(NAME native_draw_startup_test COMMAND native_draw_startup_test)
+            add_executable(display_scale_test src/tests/display_scale_test.cpp src/win32/screen_presenter.cpp)
+            target_include_directories(display_scale_test PRIVATE src)
+            target_compile_definitions(display_scale_test PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+            target_link_libraries(display_scale_test PRIVATE user32 gdi32 gdiplus)
+            add_test(NAME display_scale_test COMMAND display_scale_test)
             add_executable(media_bar_preview src/tests/media_bar_preview.cpp src/win32/media_bar.cpp)
             target_include_directories(media_bar_preview PRIVATE src)
             target_compile_definitions(media_bar_preview PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
@@ -227,7 +244,7 @@ if(M88M_BUILD_GUI AND M88V_GUI_FRONTEND STREQUAL "win32")
             $<$<COMPILE_LANGUAGE:CXX>:/execution-charset:.932>)
     endif()
     target_link_libraries(m88_win32 PRIVATE m88_development
-        comctl32 winmm gdi32 shell32 ole32 uuid comdlg32 d2d1 dxguid)
+        comctl32 winmm gdi32 gdiplus shell32 ole32 uuid comdlg32 d2d1 dxguid)
 endif()
 
 # --- Optional portable raylib frontend ---------------------------------
