@@ -280,7 +280,7 @@ void WinUI::LoadWindowPosition()
 {
     screenWidth=std::clamp(int(GetPrivateProfileInt("Display","ScreenWidth",640,m88ini)),320,7680);
     screenHeight=MulDiv(screenWidth,5,8);
-    scaleFilter=std::clamp(int(GetPrivateProfileInt("Display","Interpolation",0,m88ini)),0,2);
+    scaleFilter=std::clamp(int(GetPrivateProfileInt("Display","Interpolation",2,m88ini)),0,2);
     ResizeWindow(screenWidth,screenHeight);
 	if (config.flag2 & Config::saveposition) {
 		WINDOWPLACEMENT wp;

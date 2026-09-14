@@ -4,6 +4,7 @@
 #include <gdiplus.h>
 #include "win32/display_scale.h"
 #include "win32/screen_presenter.h"
+#include "win32/screen_resampler.h"
 #include <vector>
 #include <iostream>
 #include <stdexcept>
@@ -11,6 +12,28 @@
 void Check(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
 int main() {
     try {
+        M88V::ScreenResampler resampler;
+        const uint32_t edge[]={0xff000000u,0xffffffffu};
+        const int expected[2][4]={{0,64,191,255},{0,52,203,255}};
+        for(int filter=1;filter<=2;++filter) {
+            Check(resampler.Render(edge,2,1,4,1,filter),"resampler edge kernel");
+            for(int x=0;x<4;++x)
+                Check(int(resampler.Pixels()[x]&255)==expected[filter-1][x],"bilinear / Catmull-Rom reflected-edge samples");
+            std::vector<uint32_t> constant(63*39,0xff336699u);
+            for(const auto& size : {std::pair<int,int>{95,59},{31,19},{1,1}}) {
+                Check(resampler.Render(constant.data(),63,39,size.first,size.second,filter),"constant resampling");
+                for(int i=0;i<size.first*size.second;++i)
+                    Check(resampler.Pixels()[i]==0xff336699u,"constant color survives odd scales and edge reflection");
+            }
+            std::vector<uint32_t> alternating(64*40);
+            for(int y=0;y<40;++y) for(int x=0;x<64;++x)
+                alternating[y*64+x]=((x+y)&1)?0xffffffffu:0xff000000u;
+            for(const auto& size : {std::pair<int,int>{32,20},{16,10}}) {
+                Check(resampler.Render(alternating.data(),64,40,size.first,size.second,filter),"antialiased downsample");
+                for(int y=2;y<size.second-2;++y) for(int x=2;x<size.first-2;++x)
+                    Check(abs(int(resampler.Pixels()[y*size.first+x]&255)-128)<=1,"downscale widens kernel to suppress checker aliasing");
+            }
+        }
         for (int percent=50; percent<=400; percent+=50) {
             int w=640*percent/100,h=400*percent/100;
             RECT fit=M88V::FitScreen(w,h);

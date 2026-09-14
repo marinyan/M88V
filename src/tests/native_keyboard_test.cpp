@@ -5,6 +5,8 @@
 #include "pc88/config.h"
 #include <iostream>
 #include <stdexcept>
+#include <chrono>
+#include "messages.h"
 
 static void Check(bool condition) {
     if (!condition) throw std::runtime_error("Native keyboard matrix/state mismatch");
@@ -25,10 +27,12 @@ int main() {
             keyboard.VSync(0, 1);
             Check((keyboard.In(2) & 8) != 0);
             keyboard.KeyDown('C', 0);
+            Check((keyboard.In(2) & 8) == 0); // Publish without waiting for VSync.
             keyboard.VSync(0, 1);
             Check((keyboard.In(2) & 8) == 0);
             const auto pressed = keyboard.CaptureDevelopmentState();
             keyboard.KeyUp('C', 0);
+            Check((keyboard.In(2) & 8) != 0);
             keyboard.VSync(0, 1);
             Check((keyboard.In(2) & 8) != 0);
             keyboard.RestoreDevelopmentState(pressed);
@@ -105,6 +109,52 @@ int main() {
             Check(!shifted());
         }
         }
+        // Deliberately leave the UI queue unpumped. No per-frame request may
+        // accumulate there, and input/VSync must remain usable without a reply.
+        HWND window = CreateWindowExA(0, "STATIC", "Keyboard test", WS_POPUP,
+            0, 0, 1, 1, nullptr, nullptr, GetModuleHandle(nullptr), nullptr);
+        Check(window != nullptr);
+        {
+            PC8801::Config config{};
+            config.basicmode = PC8801::Config::N88V2;
+            config.keytype = PC8801::Config::AT106;
+            config.flags = PC8801::Config::usearrowfor10;
+            PC8801::WinKeyIF keyboard;
+            Check(keyboard.Init(window));
+            keyboard.ApplyConfig(&config);
+            keyboard.Reset();
+            keyboard.Activate(true);
+            BYTE original[256]{}, state[256]{};
+            Check(GetKeyboardState(original) != FALSE);
+            state[VK_RIGHT] = 0x80;
+            state[VK_CAPITAL] = 1;
+            Check(SetKeyboardState(state) != FALSE);
+            keyboard.KeyDown(VK_RIGHT, 1u << 24);
+            Check((keyboard.In(0) & 0x40) == 0); // UI snapshot arrow mapping.
+            Check((keyboard.In(10) & 0x80) == 0); // UI snapshot lock toggle.
+            state[VK_RIGHT] = 0;
+            Check(SetKeyboardState(state) != FALSE);
+            keyboard.KeyUp(VK_RIGHT, 1u << 24);
+            Check((keyboard.In(0) & 0x40) != 0);
+            keyboard.KeyDown('C', 0);
+            const auto begin = std::chrono::steady_clock::now();
+            for (int frame = 0; frame < 32; ++frame) {
+                keyboard.VSync(0, 1);
+                Check((keyboard.In(2) & 8) == 0);
+            }
+            const auto elapsed = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - begin).count();
+            MSG request{};
+            Check(!PeekMessage(&request, window, WM_M88_SENDKEYSTATE,
+                WM_M88_SENDKEYSTATE, PM_NOREMOVE));
+            keyboard.Activate(false);
+            Check(keyboard.In(2) == 0xff);
+            keyboard.Activate(true);
+            Check((keyboard.In(2) & 8) != 0);
+            Check(SetKeyboardState(original) != FALSE);
+            std::cout << "Unpumped UI, 32 input frames: " << elapsed << " ms\n";
+        }
+        DestroyWindow(window);
         std::cout << "Native keyboard: letters, keypad/SHIFT, focus and snapshot state: PASS\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
