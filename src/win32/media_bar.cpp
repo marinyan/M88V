@@ -61,7 +61,7 @@ bool MediaBar::Create(HWND owner)
     HDC dc = GetDC(parent); dpi = GetDeviceCaps(dc, LOGPIXELSY); ReleaseDC(parent, dc);
     WNDCLASSW wc = {};
     wc.lpfnWndProc = WindowProc; wc.hInstance = GetModuleHandle(nullptr);
-    wc.lpszClassName = L"M88VMediaBar"; wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.lpszClassName = L"M88VMediaBar"; wc.hCursor = LoadCursor(nullptr, IDC_HAND);
     if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return false;
     window = CreateWindowExW(0, wc.lpszClassName, L"Media status", WS_CHILD | WS_VISIBLE,
         0, 0, 0, 0, parent, nullptr, wc.hInstance, this);
@@ -119,6 +119,15 @@ void MediaBar::UpdateTooltips()
     }
 }
 
+int MediaBar::HitTest(POINT point) const
+{
+    RECT rect; GetClientRect(window, &rect);
+    if (!PtInRect(&rect, point)) return -1;
+    // Use the same integer boundaries as painting, including uneven widths.
+    for (int i=0; i<3; ++i) if (point.x < rect.right*(i+1)/3) return i;
+    return -1;
+}
+
 LRESULT CALLBACK MediaBar::WindowProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp)
 {
     auto self = reinterpret_cast<MediaBar*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
@@ -127,6 +136,28 @@ LRESULT CALLBACK MediaBar::WindowProc(HWND hwnd, UINT message, WPARAM wp, LPARAM
         SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
     }
     if (message == WM_ERASEBKGND) return 1;
+    if (self && message == WM_LBUTTONDOWN) {
+        self->pressedSlot = self->HitTest({static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))});
+        if (self->pressedSlot >= 0) SetCapture(hwnd);
+        return 0;
+    }
+    if (self && message == WM_LBUTTONUP) {
+        int slot = self->HitTest({static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))});
+        bool clicked = slot >= 0 && slot == self->pressedSlot && GetCapture() == hwnd;
+        self->pressedSlot = -1;
+        if (GetCapture() == hwnd) ReleaseCapture();
+        if (clicked) {
+            RECT rect; GetClientRect(hwnd, &rect);
+            POINT anchor = {rect.right*slot/3, 0}; ClientToScreen(hwnd, &anchor);
+            if (self->tooltip) SendMessageW(self->tooltip, TTM_POP, 0, 0);
+            PostMessage(self->parent, MenuMessage, slot, MAKELPARAM(anchor.x, anchor.y));
+        }
+        return 0;
+    }
+    if (self && (message == WM_CANCELMODE || message == WM_CAPTURECHANGED)) {
+        self->pressedSlot = -1;
+        if (message == WM_CANCELMODE && GetCapture() == hwnd) ReleaseCapture();
+    }
     if (message == WM_SYSCOLORCHANGE || message == WM_THEMECHANGED || message == WM_SETTINGCHANGE)
         InvalidateRect(hwnd, nullptr, FALSE);
     if (message == WM_PAINT && self) {

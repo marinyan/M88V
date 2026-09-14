@@ -20,9 +20,25 @@ int main()
         Check(child != nullptr, "media child exists");
         RECT bounds; GetWindowRect(child, &bounds);
         Check(bounds.right-bounds.left == 640 && bounds.bottom == 480 && bounds.bottom-bounds.top == bar.Height(), "footer avoids status row");
+        auto click = [&](int downX, int upX, int expected) {
+            SendMessage(child, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(downX, 12));
+            SendMessage(child, WM_LBUTTONUP, 0, MAKELPARAM(upX, 12));
+            MSG message = {};
+            bool posted = !!PeekMessage(&message, parent, MediaBar::MenuMessage, MediaBar::MenuMessage, PM_REMOVE);
+            Check(expected < 0 ? !posted : posted && message.wParam == expected, "indicator click routes to matching menu");
+        };
+        click(20, 20, 0);
+        click(212, 212, 0);
+        click(213, 213, 1);
+        click(426, 426, 2);
+        click(639, 639, 2);
+        click(20, 300, -1); // Moving to another slot cancels.
+        click(20, -1, -1);  // Releasing outside the bar cancels.
         SetWindowPos(parent, nullptr, 0, 0, 800, 600, SWP_NOZORDER | SWP_NOACTIVATE);
         bar.Resize(0); GetWindowRect(child, &bounds);
         Check(bounds.right-bounds.left == 800 && bounds.bottom == 600, "footer resizes without status row");
+        click(266, 266, 1);
+        click(533, 533, 2);
         bar.Destroy(); Check(!bar.IsOpen() && bar.Height() == 0 && !IsWindow(child), "hide footer");
         Check(bar.Create(parent), "restore footer after fullscreen");
         bar.Destroy(); DestroyWindow(parent);
