@@ -20,8 +20,10 @@ private:
     HWND window = nullptr;
     ULONG_PTR gdiplus = 0;
     int width=640, height=400, viewWidth=640, viewHeight=400;
-    int filter=0;
+    int filter=2;
     std::vector<uint8> indices;
     std::vector<uint32> pixels;
     uint32 palette[256] = {};
+    bool paletteDirty = true;
+    bool presentationDirty = true;
 };

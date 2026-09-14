@@ -107,7 +107,7 @@ private:
 	// ウインドウの状態
 	bool background;
 	bool fullscreen = false;
-    int screenWidth=640, screenHeight=400, scaleFilter=0;
+    int screenWidth=640, screenHeight=400, scaleFilter=2;
     int dragWidth=640, dragHeight=400;
 	uint displaychangedtime;
 	uint resetwindowsize;

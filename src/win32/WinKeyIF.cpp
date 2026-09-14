@@ -8,7 +8,6 @@
 
 #include "headers.h"
 #include "WinKeyIF.h"
-#include "messages.h"
 #include "pc88/config.h"
 #include "misc.h"
 
@@ -19,6 +18,7 @@ using namespace PC8801;
 
 std::vector<uint8_t> WinKeyIF::CaptureDevelopmentState() const
 {
+	CriticalSection::Lock guard(stateMutex);
 	std::vector<uint8_t> state(2 + sizeof(keyport) + sizeof(keyboard) + sizeof(keystate));
 	state[0] = 'W'; state[1] = 1;
 	size_t offset = 2;
@@ -30,6 +30,7 @@ std::vector<uint8_t> WinKeyIF::CaptureDevelopmentState() const
 
 void WinKeyIF::RestoreDevelopmentState(const std::vector<uint8_t>& state)
 {
+	CriticalSection::Lock guard(stateMutex);
 	if (state.size() != 2 + sizeof(keyport) + sizeof(keyboard) + sizeof(keystate) ||
 	    state[0] != 'W' || state[1] != 1) return;
 	size_t offset = 2;
@@ -45,7 +46,10 @@ WinKeyIF::WinKeyIF()
 : Device(0)
 {
 	hwnd = 0;
-	hevent = 0;
+	active = false;
+	pc80mode = false;
+	basicmode = 0;
+	keytable = KeyTable106[0];
 	for (int i=0; i<16; i++)
 	{
 		keyport[i] = -1;
@@ -57,11 +61,7 @@ WinKeyIF::WinKeyIF()
 	disable = false;
 }
 
-WinKeyIF::~WinKeyIF()
-{
-	if (hevent)
-		CloseHandle(hevent);
-}
+WinKeyIF::~WinKeyIF() = default;
 
 // ---------------------------------------------------------------------------
 //	初期化
@@ -69,14 +69,13 @@ WinKeyIF::~WinKeyIF()
 bool WinKeyIF::Init(HWND hwndmsg)
 {
 	hwnd = hwndmsg;
-	hevent = CreateEvent(0, 0, 0, 0);
 	keytable = KeyTable106[0];
 	if (hwnd) {
 		// Keep legacy messages for normal keys and UI shortcuts.
 		RAWINPUTDEVICE device{1, 6, 0, hwnd};
 		EnableRawShift(RegisterRawInputDevices(&device, 1, sizeof(device)) != FALSE);
 	}
-	return hevent != 0;
+	return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +83,9 @@ bool WinKeyIF::Init(HWND hwndmsg)
 //
 void IOCALL WinKeyIF::Reset(uint, uint)
 {
-	pc80mode = (basicmode & 2) != 0; 
+	CriticalSection::Lock guard(stateMutex);
+	pc80mode = (basicmode & 2) != 0;
+	InvalidatePorts();
 }
 
 // ---------------------------------------------------------------------------
@@ -92,6 +93,8 @@ void IOCALL WinKeyIF::Reset(uint, uint)
 //
 void WinKeyIF::ApplyConfig(const Config* config)
 {
+	CriticalSection::Lock guard(stateMutex);
+	InvalidatePorts();
 	usearrow = 0 != (config->flags & Config::usearrowfor10);
 	basicmode = config->basicmode;
 
@@ -117,6 +120,9 @@ void WinKeyIF::ApplyConfig(const Config* config)
 //
 void WinKeyIF::KeyDown(uint vkcode, uint32 keydata)
 {
+	CriticalSection::Lock guard(stateMutex);
+	RefreshKeyboardState();
+	InvalidatePorts();
 	if (rawshift && (vkcode == VK_SHIFT || vkcode == VK_LSHIFT || vkcode == VK_RSHIFT)) return;
 	if (keytable == KeyTable106[0])
 	{
@@ -137,6 +143,9 @@ void WinKeyIF::KeyDown(uint vkcode, uint32 keydata)
 //
 void WinKeyIF::KeyUp(uint vkcode, uint32 keydata)
 {
+	CriticalSection::Lock guard(stateMutex);
+	RefreshKeyboardState();
+	InvalidatePorts();
 	if (rawshift && (vkcode == VK_SHIFT || vkcode == VK_LSHIFT || vkcode == VK_RSHIFT)) return;
 	uint keyindex = (vkcode & 0xff) | (keydata & (1<<24) ? 0x100 : 0);
 	keystate[keyindex] = 0;
@@ -253,14 +262,10 @@ uint WinKeyIF::GetKey(const Key* key)
 //
 void IOCALL WinKeyIF::VSync(uint,uint d)
 {
+	CriticalSection::Lock guard(stateMutex);
 	if (d && active)
 	{
-		if (hwnd)
-		{
-			PostMessage(hwnd, WM_M88_SENDKEYSTATE, 
-				reinterpret_cast<WPARAM>(keyboard), reinterpret_cast<LPARAM>(hevent));
-			WaitForSingleObject(hevent, 10);
-		}
+		// The UI publishes input as messages arrive; never wait for its queue here.
 
 		if (keytable == KeyTable106[0] || keytable == KeyTable101[0])
 		{
@@ -273,15 +278,30 @@ void IOCALL WinKeyIF::VSync(uint,uint d)
 	}
 }
 
+// Called only by UI-thread input/focus handlers. GetKeyboardState belongs to
+// that thread's input queue; VSync must not call it from the emulator thread.
+void WinKeyIF::RefreshKeyboardState()
+{
+	if (hwnd) GetKeyboardState(keyboard);
+}
+
+void WinKeyIF::InvalidatePorts()
+{
+	for (int& port : keyport) port = -1;
+}
+
 void WinKeyIF::EnableRawShift(bool enabled)
 {
+	CriticalSection::Lock guard(stateMutex);
 	rawshift = enabled;
 	keystate[VK_SHIFT] = keystate[VK_SHIFT | 0x100] = 0;
 	keystate[VK_LSHIFT] = keystate[VK_RSHIFT] = 0;
+	InvalidatePorts();
 }
 
 void WinKeyIF::RawKeyboard(const RAWKEYBOARD& key)
 {
+	CriticalSection::Lock guard(stateMutex);
 	if (!rawshift || !active || key.VKey >= 255 ||
 	    (key.Flags & (RI_KEY_E0 | RI_KEY_E1))) return;
 	if (key.VKey != VK_SHIFT && key.VKey != VK_LSHIFT && key.VKey != VK_RSHIFT) return;
@@ -293,23 +313,22 @@ void WinKeyIF::RawKeyboard(const RAWKEYBOARD& key)
 	else return;
 	keystate[side] = (key.Flags & RI_KEY_BREAK) ? 0 : 1;
 	keystate[VK_SHIFT] = keystate[VK_LSHIFT] | keystate[VK_RSHIFT];
+	InvalidatePorts();
 }
 
 void WinKeyIF::Activate(bool yes)
 {
+	CriticalSection::Lock guard(stateMutex);
 	active = yes;
-	if (active)
-	{
-		memset(keystate, 0, 512);
-		for (int i=0; i<16; i++)
-		{
-			keyport[i] = -1;
-		}
-	}
+	memset(keystate, 0, sizeof(keystate));
+	memset(keyboard, 0, sizeof(keyboard));
+	if (active) RefreshKeyboardState();
+	InvalidatePorts();
 }
 
 void WinKeyIF::Disable(bool yes)
 {
+	CriticalSection::Lock guard(stateMutex);
 	disable = yes;
 }
 
@@ -318,6 +337,7 @@ void WinKeyIF::Disable(bool yes)
 //
 uint IOCALL WinKeyIF::In(uint port)
 {
+	CriticalSection::Lock guard(stateMutex);
 	port &= 0x0f;
 	
 	if (active)

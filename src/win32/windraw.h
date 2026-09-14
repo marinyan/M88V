@@ -109,7 +109,7 @@ private:
 	int drawcount;
 	int guicount;
 
-    int presentationWidth=640, presentationHeight=400, presentationFilter=0;
+    int presentationWidth=640, presentationHeight=400, presentationFilter=2;
 	int width = 640;
 	int height = 400;
 

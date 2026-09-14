@@ -6,6 +6,7 @@
 
 #include "headers.h"
 #include "sequence.h"
+#include "frame_execution_budget.h"
 #include "pc88/pc88.h"
 #include "misc.h"
 
@@ -31,6 +32,8 @@ Sequencer::~Sequencer()
 bool Sequencer::Init(PC88* _vm)
 {
 	vm = _vm;
+    if (!wakeEvent) wakeEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (!wakeEvent) return false;
 
 	active = false;
 	shouldterminate = false;
@@ -38,15 +41,14 @@ bool Sequencer::Init(PC88* _vm)
 	clock = 1;
 	speed = 100;
 
-	drawnextframe = false;
 	skippedframe = 0;
 	refreshtiming = 1;
 	refreshcount = 0;
 
 	if (!hthread)
 	{
-		hthread = (HANDLE) 
-			_beginthreadex(NULL, 0, ThreadEntry, 
+		hthread = (HANDLE)
+			_beginthreadex(NULL, 0, ThreadEntry,
 				reinterpret_cast<void*>(this), 0, &idthread);
 	}
 	return !!hthread;
@@ -60,6 +62,7 @@ bool Sequencer::Cleanup()
 	if (hthread)
 	{
 		shouldterminate = true;
+        SetEvent(wakeEvent);
 		if (WAIT_TIMEOUT == WaitForSingleObject(hthread, 3000))
 		{
 			TerminateThread(hthread, 0);
@@ -67,6 +70,10 @@ bool Sequencer::Cleanup()
 		CloseHandle(hthread);
 		hthread = 0;
 	}
+	if (vm) {
+		vm = nullptr;
+	}
+    if (wakeEvent) { CloseHandle(wakeEvent); wakeEvent = nullptr; }
 	return true;
 }
 
@@ -77,6 +84,7 @@ uint Sequencer::ThreadMain()
 {
 	time = keeper.GetTime();
 	effclock = 100;
+	executionCarry = 0;
 
 	while (!shouldterminate)
 	{
@@ -86,7 +94,7 @@ uint Sequencer::ThreadMain()
 		}
 		else
 		{
-			Sleep(20);
+            WaitForSingleObject(wakeEvent, INFINITE);
 			time = keeper.GetTime();
 		}
 	}
@@ -107,10 +115,26 @@ uint CALLBACK Sequencer::ThreadEntry(void* arg)
 //	length	実行する時間 (0.01ms)
 //	eff		実効クロック
 //
-inline void Sequencer::Execute(long clk, long length, long eff)
+inline int Sequencer::Execute(long clk, long length, long eff)
 {
 	CriticalSection::Lock lock(cs);
-	execcount += clk * vm->Proceed(length, clk, eff);
+	if (!active || shouldterminate || timingRevision != executionRevision || length <= 0) return 0;
+	const int consumed = vm->Proceed(length, clk, eff);
+	execcount += clk * consumed;
+	return consumed;
+}
+
+bool Sequencer::WaitForDeadline(uint32 deadline)
+{
+	while (active && !shouldterminate && timingRevision == executionRevision) {
+		if (keeper.WaitUntil(deadline, wakeEvent)) {
+			if (active && !shouldterminate && timingRevision == executionRevision) return true;
+			break;
+		}
+	}
+	time = keeper.GetTime();
+	executionCarry = 0;
+	return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,67 +142,83 @@ inline void Sequencer::Execute(long clk, long length, long eff)
 //
 void Sequencer::ExecuteAsynchronus()
 {
-	if (clock <= 0)
+	int frameClock, frameSpeed, texec;
 	{
-		time = keeper.GetTime();
+		CriticalSection::Lock lock(cs);
+		if (!active || shouldterminate) return;
+		const uint32 revision = timingRevision;
+		if (revision != executionRevision) {
+			// A quick pause/resume must not replay the elapsed pause as CPU work.
+			executionRevision = revision;
+			time = keeper.GetTime();
+			executionCarry = 0;
+		}
+		frameClock = clock;
+		frameSpeed = speed;
+		texec = frameClock > 0 ? Max(1, vm->GetFramePeriod()) : 0;
+		if (frameClock <= 0) time = keeper.GetTime();
 		vm->TimeSync();
+	}
+	if (frameClock <= 0)
+	{
+		executionCarry = 0;
 		DWORD ms;
 		int eclk = 0;
 		do
 		{
-			if (clock)
-				Execute(-clock, 500, effclock);
-			else
-				Execute(effclock, 500 * speed / 100, effclock);
+			const int consumed = frameClock ? Execute(-frameClock, 500, effclock)
+				: Execute(effclock, 500 * frameSpeed / 100, effclock);
+			if (consumed <= 0) {
+				WaitForSingleObject(wakeEvent, 1);
+				time = keeper.GetTime();
+				return;
+			}
 			eclk += 5;
 			ms = keeper.GetTime() - time;
 		} while (ms < 1000);
-		vm->UpdateScreen();
+		{
+			CriticalSection::Lock lock(cs);
+			if (!active || shouldterminate || timingRevision != executionRevision) return;
+			vm->UpdateScreen();
+		}
 
 		effclock = Min((Min(1000, eclk) * effclock * 100 / ms) + 1, 10000);
 	}
 	else
 	{
-		int texec = vm->GetFramePeriod();
-		int twork = texec * 100 / speed;
-		vm->TimeSync();
-		Execute(clock, texec, clock * speed / 100);
-	
-		int32 tcpu = keeper.GetTime() - time;
-		if (tcpu < twork)
-		{
-			if (drawnextframe && ++refreshcount >= refreshtiming)
-			{
-				vm->UpdateScreen();
-				skippedframe = 0;
-				refreshcount = 0;
-			}
-
-			int32 tdraw = keeper.GetTime() - time;
-			
-			if (tdraw > twork)
-			{
-				drawnextframe = false;
-			}
-			else
-			{
-				int it = (twork - tdraw) / 100;
-				if (it > 0)
-					Sleep(it);
-				drawnextframe = true;
-			}
-			time += twork;
-		}
-		else
-		{
-			time += twork;
-			if (++skippedframe >= 20)
-			{
-				vm->UpdateScreen();
-				skippedframe = 0;
+		const int twork = Max(1, texec * 100 / frameSpeed);
+		// Pace frame execution against one absolute timeline. Charge instruction
+		// overshoot to the next frame instead of gaining CPU time per call.
+		FrameExecutionBudget budget(texec, frameSpeed, executionCarry);
+		executionCarry = 0;
+		while (budget.NextBatch() > 0) {
+			const uint32 deadline = time + budget.DeadlineOffset();
+			if (!WaitForDeadline(deadline)) return;
+			const int consumed = Execute(frameClock, budget.NextBatch(),
+				frameClock * frameSpeed / 100);
+			if (consumed <= 0) {
+				// The debugger can pause the core independently of the sequencer.
+				// Yield before retrying so a zero-tick Proceed cannot busy-loop.
+				WaitForSingleObject(wakeEvent, 1);
 				time = keeper.GetTime();
+				return;
+			}
+			budget.Consume(consumed);
+		}
+		executionCarry = budget.Carry();
+
+		{
+			CriticalSection::Lock lock(cs);
+			if (active && !shouldterminate && timingRevision == executionRevision && ++refreshcount >= refreshtiming) {
+				if (int32(keeper.GetTime() - time) < twork * 2 || ++skippedframe >= 20) {
+					vm->UpdateScreen();
+					refreshcount = skippedframe = 0;
+				}
 			}
 		}
+		if (!WaitForDeadline(time + twork)) return;
+		time += twork;
+		if (int32(keeper.GetTime() - time) > twork * 20) time = keeper.GetTime();
 	}
 }
 
@@ -187,11 +227,7 @@ void Sequencer::ExecuteAsynchronus()
 //
 long Sequencer::GetExecCount()
 {
-//	CriticalSection::Lock lock(cs);	// 正確な値が必要なときは有効にする
-	
-	int i = execcount;
-	execcount = 0;
-	return i;
+	return execcount.exchange(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -200,6 +236,9 @@ long Sequencer::GetExecCount()
 void Sequencer::Activate(bool a)
 {
 	CriticalSection::Lock lock(cs);
-	active = a;
+	if (active.exchange(a) != a) {
+		++timingRevision;
+		if (wakeEvent) SetEvent(wakeEvent);
+	}
 }
 

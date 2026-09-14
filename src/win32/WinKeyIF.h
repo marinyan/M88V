@@ -66,6 +66,8 @@ private:
 	};
 
 	uint GetKey(const Key* key);
+	void RefreshKeyboardState();
+	void InvalidatePorts();
 
 	static const Key KeyTable98[16 * 8][8];
 	static const Key KeyTable106[16 * 8][8];
@@ -79,7 +81,7 @@ private:
 	bool pc80mode;
 	bool rawshift = false;
 	HWND hwnd;
-	HANDLE hevent;
+	mutable CriticalSection stateMutex;
 	uint basicmode;
 	int keyport[16];
 	uint8 keyboard[256];

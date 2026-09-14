@@ -11,6 +11,7 @@
 #include "types.h"
 #include "critsect.h"
 #include "timekeep.h"
+#include <atomic>
 
 class PC88;
 
@@ -40,47 +41,60 @@ public:
 	void SetRefreshTiming(uint rti);
 
 private:
-	void Execute(long clock, long length, long ec);
+	int Execute(long clock, long length, long ec);
+	bool WaitForDeadline(uint32 deadline);
 	void ExecuteAsynchronus();
-	
+
 	uint ThreadMain();
 	static uint CALLBACK ThreadEntry(LPVOID arg);
-	
+
 	PC88* vm;
 
 	TimeKeeper keeper;
 
 	CriticalSection cs;
 	HANDLE hthread;
+    HANDLE wakeEvent = nullptr;
 	uint idthread;
 
-	int clock;					// 1秒は何tick?
-	int speed;					// 
-	int execcount;
+	std::atomic<int> clock{1};					// 1秒は何tick?
+	std::atomic<int> speed{100};					//
+	std::atomic<int> execcount{0};
 	int effclock;
-	int time;
+	uint32 time;
+	int executionCarry = 0;
+	std::atomic<uint32> timingRevision{0};
+	uint32 executionRevision = 0;
 
 	uint skippedframe;
 	uint refreshcount;
-	uint refreshtiming;
-	bool drawnextframe;
-	
-	volatile bool shouldterminate;
-	volatile bool active;
+	std::atomic<uint> refreshtiming{1};
+
+	std::atomic<bool> shouldterminate = false;
+	std::atomic<bool> active = false;
 };
 
 inline void Sequencer::SetClock(int clk)
 {
-	clock = clk;
+	CriticalSection::Lock lock(cs);
+	if (clock.exchange(clk) != clk) {
+		++timingRevision;
+		if (wakeEvent) SetEvent(wakeEvent);
+	}
 }
 
 inline void Sequencer::SetSpeed(int spd)
 {
-	speed = spd;
+	CriticalSection::Lock lock(cs);
+	if (spd < 1) spd = 1;
+	if (speed.exchange(spd) != spd) {
+		++timingRevision;
+		if (wakeEvent) SetEvent(wakeEvent);
+	}
 }
 
 inline void Sequencer::SetRefreshTiming(uint rti)
 {
-	refreshtiming = rti;
+	refreshtiming = rti ? rti : 1;
 }
 
