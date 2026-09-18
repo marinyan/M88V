@@ -166,6 +166,12 @@ private:
 	uint status;
 	uint column;
 	int linetime;
+    static constexpr uint32_t LineUnit = 65536;
+    uint32_t linePeriod = 4223664; // round(4.028 * 65536) * 16
+    uint32_t lineFraction = 0;
+    uint32_t lineDeadline = 0;
+    void SetLinePeriod(unsigned rasters);
+    void AddLineEvent(unsigned rows, TimeFunc callback);
 	uint frametime;
 	uint pcgadr;
 	uint pcgdat;
@@ -223,7 +229,7 @@ private:
 //
 inline int CRTC::GetFramePeriod()
 {
-	return linetime * (height + vretrace);
+	return int(uint64_t(linePeriod) * (height + vretrace) / LineUnit);
 }
 
 }

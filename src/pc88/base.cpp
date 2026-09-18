@@ -37,11 +37,12 @@ Base::~Base()
 bool Base::Init(PC88* pc88)
 {
 	pc = pc88;
+	rtcRemainder = 0;
+	rtcNext = static_cast<uint32_t>(pc->GetTime());
 	RTC();
 	sw30 = 0xcb;
 	sw31 = 0x79;
 	sw6e = 0xff;
-	pc->AddEvent(167, this, STATIC_CAST(TimeFunc, &Base::RTC), 0, true);
 	return true;
 }
 
@@ -95,13 +96,39 @@ void IOCALL Base::Reset(uint, uint)
 //	Real Time Clock Interrupt (600Hz)
 void Base::ResetRTC()
 {
-	pc->AddEvent(167, this, STATIC_CAST(TimeFunc, &Base::RTC), 0, true);
+	pc->DelEvent(this);
+	rtcRemainder = 0;
+	rtcNext = static_cast<uint32_t>(pc->GetTime());
+	ScheduleRTC();
 }
 
 void IOCALL Base::RTC(uint)
 {
 	pc->bus1.Out(PC88::pint2, 1);
+	ScheduleRTC();
 //	LOG0("RTC\n");
+}
+
+// Preserve the intended deadline so CPU instruction overshoot does not become
+// part of every 600 Hz period. M88am uses the same fractional/deadline approach;
+// the exact rational here also avoids fixed-point approximation drift.
+void Base::ScheduleRTC()
+{
+    rtcRemainder += 100000;
+    const uint32_t period = rtcRemainder / 600;
+    rtcRemainder %= 600;
+    rtcNext += period;
+    const uint32_t now = static_cast<uint32_t>(pc->GetTime());
+    const uint32_t remaining = rtcNext - now;
+    uint32_t delay = remaining;
+    if (remaining == 0 || remaining > period)
+    {
+        // A whole period late (or a changed time base): resume without a burst.
+        delay = period;
+        rtcNext = now + period;
+    }
+    pc->AddEvent(static_cast<int>(delay), this,
+        STATIC_CAST(TimeFunc, &Base::RTC), 0, false);
 }
 
 // ---------------------------------------------------------------------------

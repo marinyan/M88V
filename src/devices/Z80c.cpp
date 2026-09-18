@@ -707,6 +707,7 @@ void IOCALL Z80C::Reset(uint, uint)
 	reg.rreg = 0;
 
 	RegF = 0;
+	xf = 0;
 	uf = 0;
 	instlim = 0;
 	instbase = 0;
@@ -809,7 +810,7 @@ void Z80C::SetM(uint n)
 	else
 	{
 		Write8(RegXHL + int8(Fetch8()), n);
-		CLK(12);
+		CLK(19-7-4); // DD/FD already accounts for the four prefix clocks.
 	}
 }
 
@@ -820,7 +821,7 @@ uint8 Z80C::GetM()
 	else
 	{
 		int r = Read8(RegXHL + int8(Fetch8()));
-		CLK(12);
+		CLK(19-7-4); // DD/FD already accounts for the four prefix clocks.
 		return r;
 	}
 }
@@ -836,6 +837,7 @@ uint Z80C::GetAF()
 inline void Z80C::SetAF(uint n)
 {
 	RegAF = n;
+	xf = n;
 	uf = 0;
 }
 
@@ -975,6 +977,9 @@ uint8 Z80C::Dec8(uint8 y)
 
 uint Z80C::ADD16(uint x, uint y)
 {
+	// ADD HL/IX/IY preserves S, Z and P/V from the preceding instruction.
+	// Resolve them before replacing the lazy arithmetic operands and mask.
+	GetSF(); GetZF(); GetPF();
 	fx32 = (x & 0xffff) * 2;
 	fy32 = (y & 0xffff) * 2;
 	uf = CF|HF|WF;
@@ -1250,42 +1255,42 @@ void Z80C::SingleStep(uint m)
 		CLK(10);
 		break;
 
-	case 0xc2:	/*NZ*/ if (!GetZF()) Jump(Fetch16()); else PCInc(2); CLK(10); break; 
-	case 0xca:	/* Z*/ if ( GetZF()) Jump(Fetch16()); else PCInc(2); CLK(10); break; 
-	case 0xd2:	/*NC*/ if (!GetCF()) Jump(Fetch16()); else PCInc(2); CLK(10); break; 
-	case 0xda:	/* C*/ if ( GetCF()) Jump(Fetch16()); else PCInc(2); CLK(10); break; 
-	case 0xe2:	/*PO*/ if (!GetPF()) Jump(Fetch16()); else PCInc(2); CLK(10); break; 
-	case 0xea:	/*PE*/ if ( GetPF()) Jump(Fetch16()); else PCInc(2); CLK(10); break; 
-	case 0xf2:	/* P*/ if (!GetSF()) Jump(Fetch16()); else PCInc(2); CLK(10); break; 
-	case 0xfa:	/* M*/ if ( GetSF()) Jump(Fetch16()); else PCInc(2); CLK(10); break; 
+	case 0xc2:	/*NZ*/ if (!GetZF()) Jump(Fetch16()); else PCInc(2); CLK(10); break;
+	case 0xca:	/* Z*/ if ( GetZF()) Jump(Fetch16()); else PCInc(2); CLK(10); break;
+	case 0xd2:	/*NC*/ if (!GetCF()) Jump(Fetch16()); else PCInc(2); CLK(10); break;
+	case 0xda:	/* C*/ if ( GetCF()) Jump(Fetch16()); else PCInc(2); CLK(10); break;
+	case 0xe2:	/*PO*/ if (!GetPF()) Jump(Fetch16()); else PCInc(2); CLK(10); break;
+	case 0xea:	/*PE*/ if ( GetPF()) Jump(Fetch16()); else PCInc(2); CLK(10); break;
+	case 0xf2:	/* P*/ if (!GetSF()) Jump(Fetch16()); else PCInc(2); CLK(10); break;
+	case 0xfa:	/* M*/ if ( GetSF()) Jump(Fetch16()); else PCInc(2); CLK(10); break;
 
 	case 0xcd:	// CALL
 		Call();
-		CLK(10); 
+		CLK(10);
 		break;
 
-	case 0xc4:	/*NZ*/ if (!GetZF()) Call(); else PCInc(2); CLK(10); break; 
-	case 0xcc:	/* Z*/ if ( GetZF()) Call(); else PCInc(2); CLK(10); break; 
-	case 0xd4:	/*NC*/ if (!GetCF()) Call(); else PCInc(2); CLK(10); break; 
-	case 0xdc:	/* C*/ if ( GetCF()) Call(); else PCInc(2); CLK(10); break; 
-	case 0xe4:	/*PO*/ if (!GetPF()) Call(); else PCInc(2); CLK(10); break; 
-	case 0xec:	/*PE*/ if ( GetPF()) Call(); else PCInc(2); CLK(10); break; 
-	case 0xf4:	/* P*/ if (!GetSF()) Call(); else PCInc(2); CLK(10); break; 
-	case 0xfc:	/* M*/ if ( GetSF()) Call(); else PCInc(2); CLK(10); break; 
+	case 0xc4:	/*NZ*/ if (!GetZF()) Call(); else PCInc(2); CLK(10); break;
+	case 0xcc:	/* Z*/ if ( GetZF()) Call(); else PCInc(2); CLK(10); break;
+	case 0xd4:	/*NC*/ if (!GetCF()) Call(); else PCInc(2); CLK(10); break;
+	case 0xdc:	/* C*/ if ( GetCF()) Call(); else PCInc(2); CLK(10); break;
+	case 0xe4:	/*PO*/ if (!GetPF()) Call(); else PCInc(2); CLK(10); break;
+	case 0xec:	/*PE*/ if ( GetPF()) Call(); else PCInc(2); CLK(10); break;
+	case 0xf4:	/* P*/ if (!GetSF()) Call(); else PCInc(2); CLK(10); break;
+	case 0xfc:	/* M*/ if ( GetSF()) Call(); else PCInc(2); CLK(10); break;
 
 	case 0xc9:	// RET
 		Ret();
-		CLK(4); 
+		CLK(10);
 		break;
 
-	case 0xc0:	/*NZ*/ if (!GetZF()) Ret(); CLK(4); break; 
-	case 0xc8:	/* Z*/ if ( GetZF()) Ret(); CLK(4); break; 
-	case 0xd0:	/*NC*/ if (!GetCF()) Ret(); CLK(4); break; 
-	case 0xd8:	/* C*/ if ( GetCF()) Ret(); CLK(4); break; 
-	case 0xe0:	/*PO*/ if (!GetPF()) Ret(); CLK(4); break; 
-	case 0xe8:	/*PE*/ if ( GetPF()) Ret(); CLK(4); break; 
-	case 0xf0:	/* P*/ if (!GetSF()) Ret(); CLK(4); break; 
-	case 0xf8:	/* M*/ if ( GetSF()) Ret(); CLK(4); break; 
+	case 0xc0:	/*NZ*/ if (!GetZF()) { Ret(); CLK(11); } else CLK(5); break;
+	case 0xc8:	/* Z*/ if ( GetZF()) { Ret(); CLK(11); } else CLK(5); break;
+	case 0xd0:	/*NC*/ if (!GetCF()) { Ret(); CLK(11); } else CLK(5); break;
+	case 0xd8:	/* C*/ if ( GetCF()) { Ret(); CLK(11); } else CLK(5); break;
+	case 0xe0:	/*PO*/ if (!GetPF()) { Ret(); CLK(11); } else CLK(5); break;
+	case 0xe8:	/*PE*/ if ( GetPF()) { Ret(); CLK(11); } else CLK(5); break;
+	case 0xf0:	/* P*/ if (!GetSF()) { Ret(); CLK(11); } else CLK(5); break;
+	case 0xf8:	/* M*/ if ( GetSF()) { Ret(); CLK(11); } else CLK(5); break;
 
 	case 0x18:	// JR
 		JumpR();
@@ -1307,17 +1312,17 @@ void Z80C::SingleStep(uint m)
 			JumpR();
 		else 
 			PCInc(1);
-		CLK(5); 
+		CLK(8);
 		break;
 		
-	case 0xc7:	/* RST 00H */	Push(GetPC()); Jump(0x00); CLK(4); break;
-	case 0xcf:	/* RST 08H */	Push(GetPC()); Jump(0x08); CLK(4); break;
-	case 0xd7:	/* RST 10H */	Push(GetPC()); Jump(0x10); CLK(4); break;
-	case 0xdf:	/* RST 18H */	Push(GetPC()); Jump(0x18); CLK(4); break;
-	case 0xe7:	/* RST 20H */	Push(GetPC()); Jump(0x20); CLK(4); break;
-	case 0xef:	/* RST 28H */	Push(GetPC()); Jump(0x28); CLK(4); break;
-	case 0xf7:	/* RST 30H */	Push(GetPC()); Jump(0x30); CLK(4); break;
-	case 0xff:	/* RST 38H */	Push(GetPC()); Jump(0x38); CLK(4); break;
+	case 0xc7:	/* RST 00H */	Push(GetPC()); Jump(0x00); CLK(11); break;
+	case 0xcf:	/* RST 08H */	Push(GetPC()); Jump(0x08); CLK(11); break;
+	case 0xd7:	/* RST 10H */	Push(GetPC()); Jump(0x10); CLK(11); break;
+	case 0xdf:	/* RST 18H */	Push(GetPC()); Jump(0x18); CLK(11); break;
+	case 0xe7:	/* RST 20H */	Push(GetPC()); Jump(0x20); CLK(11); break;
+	case 0xef:	/* RST 28H */	Push(GetPC()); Jump(0x28); CLK(11); break;
+	case 0xf7:	/* RST 30H */	Push(GetPC()); Jump(0x30); CLK(11); break;
+	case 0xff:	/* RST 38H */	Push(GetPC()); Jump(0x38); CLK(11); break;
 
 // 16 bit arithmatic operations
 
@@ -1522,7 +1527,7 @@ void Z80C::SingleStep(uint m)
 		if (index_mode != USEHL)
 		{		
 			w += int8(Fetch8());
-			CLK(23-11);
+			CLK(23-11-4);
 		}
 		Write8(w, Inc8(Read8(w)));
 		CLK(11); 
@@ -1542,7 +1547,7 @@ void Z80C::SingleStep(uint m)
 		if (index_mode != USEHL)
 		{		
 			w += (int8)(Fetch8());
-			CLK(23-11);
+			CLK(23-11-4);
 		}
 		Write8(w, Dec8(Read8(w)));
 		CLK(11); 
@@ -1576,12 +1581,12 @@ void Z80C::SingleStep(uint m)
 
 	case 0x22: // LD (nn),xHL
 		Write16(Fetch16(), RegXHL);
-		CLK(22);
+		CLK(16);
 		break;
 
 	case 0x2a: // LD xHL,(nn)
 		RegXHL = Read16(Fetch16());
-		CLK(22);
+		CLK(16);
 		break;
 
 	case 0xf9: // LD SP,HL
@@ -1669,10 +1674,10 @@ void Z80C::SingleStep(uint m)
 		w = RegXHL;
 		if (index_mode != USEHL)
 		{
-			w += int8(Fetch8()); CLK(19-10);
+			w += int8(Fetch8()); CLK(19-10-4);
 		}
 		Write8(w, Fetch8());
-		CLK(11); 
+		CLK(10);
 		break;
 
 	// LD A,-
