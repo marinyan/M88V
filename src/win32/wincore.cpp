@@ -9,6 +9,7 @@
 #include "WinKeyIF.h"
 #include "misc.h"
 #include "pc88/config.h"
+#include "pc88/memory.h"
 #include "status.h"
 #include "device.h"
 #include "version.h"
@@ -304,16 +305,11 @@ bool WinCore::LoadShapshot(const char* filename, const char* diskname)
 		return true;
 	}
 
-	FileIO file;
-	if (!file.Open(filename, FileIO::readonly))
-		return false;
-
-	SnapshotHeader ssh;
-	if (file.Read(&ssh, sizeof(ssh)) != sizeof(ssh))
-		return false;
-	if (memcmp(ssh.id, SNAPSHOT_ID, 16))
-		return false;
-	if (ssh.major != ssmajor || ssh.minor > ssminor)
+	SnapshotHeader ssh{};
+	std::vector<uint8_t> payload;
+	if (!M88V::LegacySnapshot::Decode(bytes, ssh, payload) ||
+	    !M88V::LegacySnapshot::ValidateDevices(devlist, payload, GetMem1()->GetERAMBanks(), ssh,
+	        GetMem1()->GetResetERAMBanks(ssh.erambanks, ssh.basicmode)))
 		return false;
 
 	// applyconfig
@@ -341,56 +337,16 @@ bool WinCore::LoadShapshot(const char* filename, const char* diskname)
 
 	// 読み込み
 
-	uint8* buf = new uint8[ssh.datasize];
-	bool r = false;
-
-	if (buf)
+	const bool r = devlist.LoadStatus(payload.data());
+	if (r && diskname)
 	{
-		bool read = false;
-		if (ssh.flags & 0x80000000)
+		for (uint i=0; i<2; i++)
 		{
-			int32 csize;
-			
-			file.Read(&csize, 4);
-			if (csize < 0)
-			{
-				csize = -csize;
-				uint8* cbuf = new uint8[csize];
-				
-				if (cbuf)
-				{
-					ulong bufsize = ssh.datasize;
-					file.Read(cbuf, csize);
-					read = uncompress(buf, &bufsize, cbuf, csize) == Z_OK; 
-
-					delete[] cbuf;
-				}
-			}
+			diskmgr->Unmount(i);
+			diskmgr->Mount(i, diskname, false, ssh.disk[i], false);
 		}
-		else
-			read = file.Read(buf, ssh.datasize) == ssh.datasize;
-
-		if (read)
-		{
-			r = devlist.LoadStatus(buf);
-			if (r && diskname)
-			{
-				for (uint i=0; i<2; i++)
-				{
-					diskmgr->Unmount(i);
-					diskmgr->Mount(i, diskname, false, ssh.disk[i], false);
-				}
-			}
-			if (!r)
-			{
-				winstatusdisplay.Show(70, 3000, "バージョンが異なります");
-			    serialPort.Close();
-    GetSerial()->EnableHost(false);
-	PC88::Reset();
-			}
-		}
-		delete[] buf;
 	}
+
 	return r;
 }
 

@@ -56,6 +56,10 @@ public:
 	
 	void ApplyConfig(const Config* cfg);
 	uint8* GetRAM() { return ram; }
+	uint GetERAMBanks() const { return erambanks; }
+	uint GetResetERAMBanks(uint banks, int mode) const {
+		return !banks && (mode & 2) && (port33 & 0x80 ? n80v2rom : n80rom) ? 1 : banks;
+	}
 	uint8* GetERAM( uint bank ) { return ((bank < erambanks) ? &eram[bank * 0x8000] : ram); }
 	uint8* GetTVRAM() { return tvram; }
 	quadbyte* GetGVRAM() { return gvram; }
