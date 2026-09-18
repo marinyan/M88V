@@ -182,7 +182,8 @@ void CRTC::HotReset()
 //	screenwidth = 640;
 	screenheight = 400;
 
-	linetime = line200 ? int(6.258*8) : int(4.028*16);
+	SetLinePeriod(line200 ? 8 : 16);
+	lineFraction = 0;
 	height = 25; 
 	vretrace = line200 ? 7 : 3;
 	mode = clear | resize;
@@ -191,6 +192,7 @@ void CRTC::HotReset()
 	pcount[1] = 0;
 
 	scheduler->DelEvent(sev);
+	lineDeadline = uint32_t(scheduler->GetTime());
 	StartDisplay();
 }
 
@@ -279,7 +281,7 @@ uint CRTC::Command(bool a0, uint data)
 			cursormode = (data >> 5) & 3;
 			linesperchar = (data & 0x1f) + 1;
 			
-			linetime = (line200 ? int(6.258*1024) : int(4.028*1024)) * linesperchar / 1024;
+			SetLinePeriod(linesperchar);
 			if (data & 0x80)
 				mode |= skipline;
 			if (line200)
@@ -332,7 +334,9 @@ uint CRTC::Command(bool a0, uint data)
 					status |= 0x10;
 					scheduler->DelEvent(sev);
 					event = -1;
-					sev = scheduler->AddEvent(linetime*vretrace, this, STATIC_CAST(TimeFunc, &CRTC::StartDisplay), 0);
+                    lineDeadline = uint32_t(scheduler->GetTime());
+                    lineFraction = 0;
+                    AddLineEvent(vretrace, STATIC_CAST(TimeFunc, &CRTC::StartDisplay));
 				}
 			}
 			else
@@ -503,6 +507,32 @@ void CRTC::CreateGFont()
 // ---------------------------------------------------------------------------
 //	画面表示開始のタイミング処理
 //
+// Timing strategy follows M88am 2026/09-01: retain fractional row time and
+// schedule from intended deadlines, not from late CPU callback completion.
+void CRTC::SetLinePeriod(unsigned rasters)
+{
+    linePeriod = (line200 ? 410124u : 263979u) * rasters;
+    linetime = int(linePeriod / LineUnit);
+}
+
+void CRTC::AddLineEvent(unsigned rows, TimeFunc callback)
+{
+    const uint64_t duration = uint64_t(linePeriod) * rows + lineFraction;
+    const uint32_t ticks = uint32_t(duration / LineUnit);
+    lineFraction = uint32_t(duration % LineUnit);
+    const uint32_t now = uint32_t(scheduler->GetTime());
+    lineDeadline += ticks;
+    const uint32_t delay = lineDeadline - now;
+    // Unsigned arithmetic preserves the deadline across the scheduler wrap.
+    // After a discontinuity, restart rather than producing a catch-up burst.
+    if (!delay || delay > ticks) {
+        lineDeadline = now + ticks;
+        sev = scheduler->AddEvent(int(ticks), this, callback);
+    } else {
+        sev = scheduler->AddEvent(int(delay), this, callback);
+    }
+}
+
 void IOCALL CRTC::StartDisplay(uint)
 {
 	sev = 0;
@@ -525,23 +555,20 @@ void IOCALL CRTC::ExpandLine(uint)
 	{
 		// Include the current row as well as the remaining skipped rows.
 		event = e+2;
-		sev = scheduler->AddEvent(linetime * (e+1), this,
-							STATIC_CAST(TimeFunc, &CRTC::ExpandLineEnd));
+		AddLineEvent(e+1, STATIC_CAST(TimeFunc, &CRTC::ExpandLineEnd));
 	}
 	else
 	{
 		if (++column < height)
 		{
 			event = 1;
-			sev = scheduler->AddEvent(linetime, this, 
-								STATIC_CAST(TimeFunc, &CRTC::ExpandLine));
+			AddLineEvent(1, STATIC_CAST(TimeFunc, &CRTC::ExpandLine));
 		}
 		else
 		{
 			// Fetching the final row starts its display interval; VRTC follows it.
 			event = 2;
-			sev = scheduler->AddEvent(linetime, this,
-								STATIC_CAST(TimeFunc, &CRTC::ExpandLineEnd));
+			AddLineEvent(1, STATIC_CAST(TimeFunc, &CRTC::ExpandLineEnd));
 		}
 	}
 }
@@ -614,7 +641,7 @@ inline void IOCALL CRTC::ExpandLineEnd(uint)
 //	LOG0("Vertical Retrace\n");
 	bus->Out(PC88::vrtc, 1);
 	event = -1;
-	sev = scheduler->AddEvent(linetime*vretrace, this, STATIC_CAST(TimeFunc, &CRTC::StartDisplay), 0);
+	AddLineEvent(vretrace, STATIC_CAST(TimeFunc, &CRTC::StartDisplay));
 }
 
 // ---------------------------------------------------------------------------
@@ -818,7 +845,8 @@ void CRTC::ExpandAttributes(uint8* dest, const uint8* src, uint y)
 
 	if (attrperline == 0)
 	{
-		memset(dest, 0xe0, 80);
+		// Apply START DISPLAY inversion after the attribute latch (M88am).
+		memset(dest, 0xe0 ^ (mode & inverse), 80);
 		return;
 	}
 	
@@ -839,7 +867,7 @@ void CRTC::ExpandAttributes(uint8* dest, const uint8* src, uint y)
 	{
 		if (dest[i])
 			ChangeAttr(*src), src+=2;
-		dest[i] = attr;
+		dest[i] = attr ^ (mode & inverse);
 	}
 
 	// カーソルの属性を反映
@@ -857,19 +885,16 @@ void CRTC::ChangeAttr(uint8 code)
 		if (code & 0x8)
 		{
 			attr = (attr & 0x0f) | (code & 0xf0);
-//			attr ^= mode & inverse;
 		}
 		else
 		{
 			attr = (attr & 0xf0) | ((code >> 2) & 0xd) | ((code & 1) << 1);
-			attr ^= mode & inverse;
 			attr ^= ((code & 2) && !(code & 1)) ? attr_blink : 0;
 		}
 	}
 	else
 	{
 		attr = 0xe0 | ((code >> 2) & 0x0d) | ((code & 1) << 1) | ((code & 0x80) >> 3);
-		attr ^= mode & inverse;
 		attr ^= ((code & 2) && !(code & 1)) ? attr_blink : 0;
 	}
 }
@@ -1204,7 +1229,8 @@ bool IFCALL CRTC::SaveStatus(uint8* s)
 	st->cursor_x = cursor_x;
 	st->cursor_y = cursor_y;
 	st->cursor_t = cursor_type;
-	st->attr = attr;
+	// Legacy rev-1/2 states contain the globally inverted attribute latch.
+	st->attr = attr ^ (mode & inverse);
 	st->column = column;
 	st->mode = mode;
 	st->status = status;
@@ -1228,7 +1254,7 @@ bool IFCALL CRTC::LoadStatus(const uint8* s)
 	cursor_x = st->cursor_x;
 	cursor_y = st->cursor_y;
 	cursor_type = st->cursor_t;
-	attr = st->attr;
+	attr = st->attr ^ (st->mode & inverse);
 	column = st->column;
 	mode = st->mode;
 	status = st->status | clear;
@@ -1236,13 +1262,17 @@ bool IFCALL CRTC::LoadStatus(const uint8* s)
 	SetTextMode(st->color);
 	
 	scheduler->DelEvent(sev);
-	if (event == 1)
-		sev = scheduler->AddEvent(linetime, this, STATIC_CAST(TimeFunc, &CRTC::ExpandLine));
-	else if (event > 1)
-		sev = scheduler->AddEvent(linetime * (event-1), this, STATIC_CAST(TimeFunc, &CRTC::ExpandLineEnd));
-	else if (event == -1 || st->rev == 1)
-		sev = scheduler->AddEvent(linetime * vretrace, this, STATIC_CAST(TimeFunc, &CRTC::StartDisplay), 0);
-	
+    lineFraction = 0; // Legacy device states do not contain sub-tick phase.
+    lineDeadline = uint32_t(scheduler->GetTime());
+    if (event == 0xff)
+        AddLineEvent(vretrace, STATIC_CAST(TimeFunc, &CRTC::StartDisplay));
+    else if (event == 1)
+        AddLineEvent(1, STATIC_CAST(TimeFunc, &CRTC::ExpandLine));
+    else if (event > 1)
+        AddLineEvent(event-1, STATIC_CAST(TimeFunc, &CRTC::ExpandLineEnd));
+    else if (st->rev == 1)
+        AddLineEvent(vretrace, STATIC_CAST(TimeFunc, &CRTC::StartDisplay));
+
 	return true;
 }
 

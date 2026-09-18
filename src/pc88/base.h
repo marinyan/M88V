@@ -9,6 +9,7 @@
 #include "schedule.h"
 #include "device.h"
 #include "Z80c.h"
+#include <cstdint>
 
 class PC88;
 class TapeManager;
@@ -54,6 +55,10 @@ public:
 		
 private:
 	PC88* pc;
+	// 100000 scheduler ticks / 600 interrupts, with no accumulated rounding.
+	uint32_t rtcRemainder = 0;
+	uint32_t rtcNext = 0;
+	void ScheduleRTC();
 
 	int dipsw;
 	int flags;

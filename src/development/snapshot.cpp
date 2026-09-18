@@ -98,6 +98,8 @@ void Snapshot::Runtime(PC88& p,StateCodec& c) {
     }
     auto& b=*p.base;
     FIELD(b,port40);FIELD(b,sw30);FIELD(b,sw31);FIELD(b,sw6e);FIELD(b,autoboot);
+    FIELD(b,rtcRemainder);FIELD(b,rtcNext);
+    if(c.loading && b.rtcRemainder>=600)throw std::runtime_error("Invalid RTC phase");
     auto& m=*p.mem1;
     FIELD(m,alureg);FIELD(m,seldic);FIELD(m,maskr);FIELD(m,maski);FIELD(m,masks);FIELD(m,aluread);
     FIELD(m,waitmode);FIELD(m,waittype);
@@ -114,6 +116,8 @@ void Snapshot::Runtime(PC88& p,StateCodec& c) {
     FIELD(v,width);FIELD(v,height);FIELD(v,blinkrate);FIELD(v,cursor_type);FIELD(v,vretrace);FIELD(v,mode);
     FIELD(v,widefont);FIELD(v,pcgenable);FIELD(v,kanaenable);FIELD(v,kanamode);
     FIELD(v,pcount);FIELD(v,param0);FIELD(v,param1);FIELD(v,event);
+    FIELD(v,linePeriod);FIELD(v,lineFraction);FIELD(v,lineDeadline);
+    if(c.loading && (v.linePeriod<263979 || v.linePeriod>410124*32 || v.lineFraction>=65536))throw std::runtime_error("Invalid CRTC timing phase");
     if(c.loading && (v.width>80||v.height>100||v.bank>1||v.pcount[0]>6||v.pcount[1]>1))throw std::runtime_error("Invalid CRTC state");
     c.Data(v.vram[0],0x5000);c.Data(v.pcgram,0x400);c.Data(v.font,0x18000);
     for(auto o:{p.opn1,p.opn2}) {
@@ -181,7 +185,7 @@ bool Snapshot::Capture(PC88& p,const PC8801::Config& cfg,uint32_t rom,
         std::vector<uint8_t> devices(p.devlist.GetStatusSize());
         if(!p.devlist.SaveStatus(devices.data()))throw std::runtime_error("Device state capture failed");
         std::vector<uint8_t> runtime;StateCodec codec(runtime,false);Runtime(p,codec);
-        Envelope h{};std::memcpy(h.magic,"M88VSTATE",9);h.version=1;h.abi=Abi();h.rom=rom;
+        Envelope h{};std::memcpy(h.magic,"M88VSTATE",9);h.version=2;h.abi=Abi();h.rom=rom;
         h.mode=cfg.basicmode;h.clock=cfg.clock;h.eram=cfg.erambanks;h.flags=cfg.flags;h.flag2=cfg.flag2;
         h.configId=ConfigId(cfg);
         h.deviceSize=static_cast<uint32_t>(devices.size());h.runtimeSize=static_cast<uint32_t>(runtime.size());h.frontendSize=static_cast<uint32_t>(frontend.size());
@@ -197,7 +201,7 @@ bool Snapshot::Restore(PC88& p,const PC8801::Config& cfg,uint32_t rom,
         if(input.size()<sizeof(Envelope)||input.size()>maxState)throw std::runtime_error("Invalid state size");
         Envelope h{};std::memcpy(&h,input.data(),sizeof(h));
         const uint32_t coreFlags=PC8801::Config::subcpucontrol|PC8801::Config::enablewait|PC8801::Config::enableopna|PC8801::Config::opnaona8|PC8801::Config::opnona8|PC8801::Config::fv15k;
-        if(std::memcmp(h.magic,"M88VSTATE",9)||h.version!=1||h.abi!=Abi()||h.rom!=rom||h.mode!=uint32_t(cfg.basicmode)||h.clock!=uint32_t(cfg.clock)||h.eram!=cfg.erambanks||((h.flags^cfg.flags)&coreFlags)||h.configId!=ConfigId(cfg))
+        if(std::memcmp(h.magic,"M88VSTATE",9)||h.version!=2||h.abi!=Abi()||h.rom!=rom||h.mode!=uint32_t(cfg.basicmode)||h.clock!=uint32_t(cfg.clock)||h.eram!=cfg.erambanks||((h.flags^cfg.flags)&coreFlags)||h.configId!=ConfigId(cfg))
             throw std::runtime_error("State format, ROM set, machine configuration or build ABI mismatch");
         if(uint64_t(sizeof(h))+h.deviceSize+h.runtimeSize+h.frontendSize!=input.size()||h.frontendSize!=frontend.size()||h.crc!=Sum(input.data()+sizeof(h),input.size()-sizeof(h)))
             throw std::runtime_error("State checksum/length mismatch");

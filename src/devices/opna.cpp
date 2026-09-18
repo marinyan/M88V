@@ -940,6 +940,8 @@ int OPNABase::ReadRAMN()
 	{
 		if (control1 & 0x10)
 		{
+			// A loop boundary raises EOS while playback continues.
+			SetStatus(adpcmnotice);
 			memaddr = startaddr;
 			data = adpcmx;
 			adpcmx = 0, adpcmd = 127;
