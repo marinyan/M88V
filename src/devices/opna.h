@@ -83,6 +83,7 @@ namespace FM
 	//	OPN Base -------------------------------------------------------
 	class OPNBase : public Timer
 	{
+        friend class M88V::Snapshot;
 	public:
 		OPNBase();
 		
@@ -121,6 +122,7 @@ namespace FM
 	//	OPN2 Base ------------------------------------------------------
 	class OPNABase : public OPNBase
 	{
+        friend class M88V::Snapshot;
 	public:
 		OPNABase();
 		~OPNABase();

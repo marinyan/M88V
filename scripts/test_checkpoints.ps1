@@ -78,12 +78,14 @@ foreach ($mode in $Modes) {
         $rejected=$false
         try { & $dev state-load -Path $wrong -ConnectionFile $connection | Out-Null } catch { $rejected=$true }
         if (-not $rejected -or (Digest mismatch)-ne $recorded) {throw "$mode mismatched-ROM handling failed"}
-        # Format 2 adds fractional clock phase; old files must fail atomically.
-        $oldFormat=Join-Path $out "$mode-old-format.m88vstate"
-        $bytes=[IO.File]::ReadAllBytes($state);$bytes[12]=1;[IO.File]::WriteAllBytes($oldFormat,$bytes)
-        $rejected=$false
-        try { & $dev state-load -Path $oldFormat -ConnectionFile $connection | Out-Null } catch { $rejected=$true }
-        if (-not $rejected -or (Digest oldformat)-ne $recorded) {throw "$mode old-format handling failed"}
+        # Format 3 adds ADPCM runtime state; both older formats fail atomically.
+        foreach ($version in @(1,2)) {
+            $oldFormat=Join-Path $out "$mode-old-format-$version.m88vstate"
+            $bytes=[IO.File]::ReadAllBytes($state);$bytes[12]=$version;[IO.File]::WriteAllBytes($oldFormat,$bytes)
+            $rejected=$false
+            try { & $dev state-load -Path $oldFormat -ConnectionFile $connection | Out-Null } catch { $rejected=$true }
+            if (-not $rejected -or (Digest "oldformat-$version")-ne $recorded) {throw "$mode old-format $version handling failed"}
+        }
         & $ctl shutdown -ConnectionFile $connection | Out-Null
         & (Join-Path $PSScriptRoot 'start_headless.ps1') -RomDirectory $RomDirectory -BuildDirectory $BuildDirectory -BasicMode $mode -Port 0 -ConnectionFile $connection | Out-Null
         & $dev state-load -Path $state -ConnectionFile $connection | Out-Null

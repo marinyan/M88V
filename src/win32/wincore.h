@@ -12,6 +12,7 @@
 #include "critsect.h"
 #include "pc88/pc88.h"
 #include "pc88/config.h"
+#include "development/legacy_snapshot.h"
 #include "winsound.h"
 #include "sequence.h"
 #include "headless/serial_port.h"
@@ -66,21 +67,7 @@ private:
 		ssmajor = 1, ssminor = 1,
 	};
 
-	struct SnapshotHeader
-	{
-		char id[16];
-		uint8 major, minor;
-
-		int8 disk[2];
-		int datasize;
-		PC8801::Config::BASICMode basicmode;
-		int16 clock;
-		uint16 erambanks;
-		uint16 cpumode;
-		uint16 mainsubratio;
-		uint flags;
-		uint flag2;
-	};
+	using SnapshotHeader = M88V::LegacySnapshot::Header;
 
 	class LockObj
 	{

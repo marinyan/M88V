@@ -388,6 +388,11 @@ OPNABase::OPNABase()
 	adpcmbuf = 0;
 	memaddr = 0;
 	startaddr = 0;
+	// Inactive chips must have defined ADPCM state before any register writes.
+	stopaddr = 0;
+	control1 = 0;
+	granuality = 4;
+	memset(adpcmreg, 0, sizeof(adpcmreg));
 	deltan = 256;
 
 	adpcmvol = 0;

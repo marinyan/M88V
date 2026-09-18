@@ -1868,7 +1868,10 @@ void Z80C::SingleStep(uint m)
 				SetFlags(ZF|NF, --RegB ? NF : NF|ZF);
 				CLK(16);
 				if (RegB)
+				{
 					PCDec(2);
+					CLK(5); // Repeating iteration: 21 T states; final iteration: 16.
+				}
 				break;
 
 			case 0xba: // INDR
@@ -1881,7 +1884,10 @@ void Z80C::SingleStep(uint m)
 				SetFlags(ZF|NF, --RegB ? NF : NF|ZF);
 				CLK(16);
 				if (RegB)
+				{
 					PCDec(2);
+					CLK(5); // Repeating iteration: 21 T states; final iteration: 16.
+				}
 				break;
 
 			case 0xb3: // OTIR
@@ -1894,7 +1900,10 @@ void Z80C::SingleStep(uint m)
 				SetFlags(ZF|NF, --RegB ? NF : NF|ZF);
 				CLK(16);
 				if (RegB)
+				{
 					PCDec(2);
+					CLK(5); // Repeating iteration: 21 T states; final iteration: 16.
+				}
 				OutTestIntr();
 				break;
 
@@ -1908,7 +1917,10 @@ void Z80C::SingleStep(uint m)
 				SetFlags(ZF|NF, --RegB ? NF : NF|ZF);
 				CLK(16);
 				if (RegB)
+				{
 					PCDec(2);
+					CLK(5); // Repeating iteration: 21 T states; final iteration: 16.
+				}
 				OutTestIntr(); 
 				break;
 
