@@ -523,8 +523,9 @@ void IOCALL CRTC::ExpandLine(uint)
 	int e = ExpandLineSub();
 	if (e)
 	{
-		event = e+1;
-		sev = scheduler->AddEvent(linetime * e, this, 
+		// Include the current row as well as the remaining skipped rows.
+		event = e+2;
+		sev = scheduler->AddEvent(linetime * (e+1), this,
 							STATIC_CAST(TimeFunc, &CRTC::ExpandLineEnd));
 	}
 	else
@@ -536,7 +537,12 @@ void IOCALL CRTC::ExpandLine(uint)
 								STATIC_CAST(TimeFunc, &CRTC::ExpandLine));
 		}
 		else
-			ExpandLineEnd();
+		{
+			// Fetching the final row starts its display interval; VRTC follows it.
+			event = 2;
+			sev = scheduler->AddEvent(linetime, this,
+								STATIC_CAST(TimeFunc, &CRTC::ExpandLineEnd));
+		}
 	}
 }
 

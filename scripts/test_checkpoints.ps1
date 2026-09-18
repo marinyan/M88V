@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 [CmdletBinding()]
 param([Parameter(Mandatory)][string]$RomDirectory,
+    [string]$BuildDirectory="",
     [string[]]$Modes=@('N802','N80V2','N','N88V1','N88V1H','N88V2'))
 $ErrorActionPreference='Stop'
 $out=Join-Path (Split-Path -Parent $PSScriptRoot) ('build/checkpoint-tests/'+[guid]::NewGuid().ToString('N'))
@@ -23,7 +24,7 @@ function Inputs {
 }
 foreach ($mode in $Modes) {
     $connection=Join-Path $out "$mode-connection.json"
-    & (Join-Path $PSScriptRoot 'start_headless.ps1') -RomDirectory $RomDirectory -BasicMode $mode -Port 0 -ConnectionFile $connection | Out-Null
+    & (Join-Path $PSScriptRoot 'start_headless.ps1') -RomDirectory $RomDirectory -BuildDirectory $BuildDirectory -BasicMode $mode -Port 0 -ConnectionFile $connection | Out-Null
     try {
         & $ctl run -Frames 180 -ConnectionFile $connection | Out-Null
         # BASIC exercises interrupts and timers; observing must not alter results.
@@ -78,7 +79,7 @@ foreach ($mode in $Modes) {
         try { & $dev state-load -Path $wrong -ConnectionFile $connection | Out-Null } catch { $rejected=$true }
         if (-not $rejected -or (Digest mismatch)-ne $recorded) {throw "$mode mismatched-ROM handling failed"}
         & $ctl shutdown -ConnectionFile $connection | Out-Null
-        & (Join-Path $PSScriptRoot 'start_headless.ps1') -RomDirectory $RomDirectory -BasicMode $mode -Port 0 -ConnectionFile $connection | Out-Null
+        & (Join-Path $PSScriptRoot 'start_headless.ps1') -RomDirectory $RomDirectory -BuildDirectory $BuildDirectory -BasicMode $mode -Port 0 -ConnectionFile $connection | Out-Null
         & $dev state-load -Path $state -ConnectionFile $connection | Out-Null
         Inputs
         if ((Digest newprocess)-ne $expected) {throw "$mode cross-process restore mismatch"}
