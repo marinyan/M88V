@@ -89,6 +89,8 @@ uint FDU::ReadID(uint flags, IDR* id)
 			if ((flags & 0xc0) == (sector->flags & 0xc0))
 			{
 				*id = sector->id;
+				if (sector->flags & FloppyDisk::idcrc)
+					return FDC::ST0_AT | FDC::ST1_DE;
 				return 0;
 			}
 		}
@@ -132,12 +134,18 @@ uint FDU::ReadSector(uint flags, IDR id, uint8* data)
 	for (; i>0; i--)
 	{
 		IDR rid;
-		if (ReadID(flags, &rid) & FDC::ST0_AT)
+		uint idresult = ReadID(flags, &rid);
+		if (idresult & FDC::ST1_DE)
+			return idresult;
+		if (idresult & FDC::ST0_AT)
 			return FDC::ST0_AT | FDC::ST1_ND;
 		cy = rid.c;
 
 		if (rid == id)
 		{
+			if (sector->flags & FloppyDisk::mam)
+				return FDC::ST0_AT | FDC::ST1_MA | FDC::ST2_MD;
+
 			memcpy(data, sector->image, Min(0x2000, sector->size));
 
 			if (sector->flags & FloppyDisk::datacrc)
@@ -181,7 +189,10 @@ uint FDU::WriteSector(uint flags, IDR id, const uint8* data, bool deleted)
 	for (; i>0; i--)
 	{
 		IDR rid;
-		if (ReadID(flags, &rid) & FDC::ST0_AT)
+		uint idresult = ReadID(flags, &rid);
+		if (idresult & FDC::ST1_DE)
+			return idresult;
+		if (idresult & FDC::ST0_AT)
 			return FDC::ST0_AT | FDC::ST1_ND;
 		cy = rid.c;
 

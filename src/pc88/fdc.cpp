@@ -1042,8 +1042,12 @@ void FDC::CmdWriteID()
 
 		if (!eot)
 		{
-			buffer = bufptr;
-			SetTimer(timerphase, 10000);
+			// Invalid SC: reject without changing the owned buffer or media.
+			hdue = hdu;
+			idr = IDR();
+			idr.n = wid.n;
+			result = ST0_AT | ST1_EN;
+			ShiftToResultPhase7();
 			return;
 		}
 		ShiftToExecWritePhase(4 * eot);
@@ -1051,6 +1055,8 @@ void FDC::CmdWriteID()
 
 	case tcphase:
 	case execwritephase:
+		Intr(false);
+		status &= ~S_RQM;
 		accepttc = false;
 		SetTimer(timerphase, 40000);
 		return;
