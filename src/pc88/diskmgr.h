@@ -55,10 +55,11 @@ public:
 
 	const char* GetTitle(int index);
 	FileIO* GetDisk(int index);
+	bool IsSupportedDisk(int index);
 	const char* GetFileName() const { return diskname; }
 	uint GetNumDisks() { return ndisks; }
 	bool SetDiskSize(int index, int newsize);
-	bool IsReadOnly() { return readonly || (playlist && (fio.GetFlags() & FileIO::readonly)); }
+	bool IsReadOnly() { return readonly || (fio.GetFlags() & FileIO::readonly); }
 	uint IsOpen() { return ref > 0; }
 	bool AddDisk(const char* title, uint type);
 
