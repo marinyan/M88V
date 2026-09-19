@@ -109,7 +109,10 @@ static void CopyTitleFromPath(char* dest, size_t destSize, const std::string& pa
 DiskImageHolder::DiskImageHolder()
 {
 	ref = 0;
+	ndisks = 0;
+	readonly = false;
 	playlist = false;
+	diskname[0] = 0;
 }
 
 DiskImageHolder::~DiskImageHolder()
@@ -346,7 +349,7 @@ void DiskImageHolder::Close()
 bool DiskImageHolder::Connect(const char* filename)
 {
 	// ���Ɏ����Ă���t�@�C�����ǂ������m�F
-	if (!strnicmp(diskname, filename, MAX_PATH))
+	if (ref > 0 && !strnicmp(diskname, filename, MAX_PATH))
 	{
 		ref++;
 		return true;
@@ -434,6 +437,23 @@ FileIO* DiskImageHolder::GetDisk(int index)
 // ---------------------------------------------------------------------------
 //	SetDiskSize
 //
+// Verify the selected entry too: playlist parsing only validates its list.
+bool DiskImageHolder::IsSupportedDisk(int index)
+{
+	if (index < 0 || index >= ndisks)
+		return false;
+	FileIO* f = GetDisk(index);
+	if (!f || !f->Seek(0, FileIO::begin))
+		return false;
+	ImageHeader ih = {};
+	if (f->Read(&ih, sizeof(ih)) < 256 + 16)
+		return false;
+	if (!memcmp(ih.title, "M88 RawDiskImage", 16))
+		return true;
+	return IsValidHeader(ih) &&
+		(ih.disktype == 0x00 || ih.disktype == 0x10 || ih.disktype == 0x20);
+}
+
 bool DiskImageHolder::SetDiskSize(int index, int newsize)
 {
 	int i;
@@ -546,11 +566,22 @@ bool DiskManager::IsImageOpen(const char* diskname)
 bool DiskManager::Mount
 (uint dr, const char* diskname, bool readonly, int index, bool create)
 {
-	int i;
-
-	Unmount(dr);
-	
+	if (dr >= max_drives || !diskname || !*diskname || index < -1)
+		return false;
 	CriticalSection::Lock lock(cs);
+	// Check existing images before ejecting either drive. Creation retains its
+	// separate legacy path; the probe must never create or truncate a file.
+	if (!create)
+	{
+		DiskImageHolder probe;
+		if (!probe.Open(diskname, true, false))
+			return false;
+		if (index >= 0 && !probe.IsSupportedDisk(index))
+			return false;
+	}
+	int i;
+	if (!Unmount(dr))
+		return false;
 	// �f�B�X�N�C���[�W�����ł� hold ����Ă��邩�ǂ������m�F
 	DiskImageHolder* h = 0;
 	for (i=0; i<max_drives; i++)

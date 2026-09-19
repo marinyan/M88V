@@ -7,6 +7,9 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 // Only fault injection needs private access; assertions use saved media / FDU output.
 struct DiskManagerTestAccess {
@@ -99,6 +102,64 @@ void FormatSecondDrive(const std::filesystem::path& first, const std::filesystem
           "last formatted sector was not persisted");
     Check(data[0] == 0xff && data[255] == 0xff, "last sector contents");
 }
+void MountFailures(const std::filesystem::path& root) {
+    const auto first = root / "first.d88", second = root / "second.d88";
+    Image(first); Image(second);
+    const auto bad = root / "bad.d88", list = root / "bad.m3u";
+    { std::ofstream out(bad, std::ios::binary); out << "not a disk"; }
+    { std::ofstream out(list); out << "missing.d88\n"; }
+    DiskManager dm;
+    Require(dm.Mount(0, first.string().c_str(), false, 0, false), "mount preserved drive 1");
+    Require(dm.Mount(1, second.string().c_str(), false, 0, false), "mount preserved drive 2");
+    std::array<uint8, 256> pending{}; pending.fill(0x68);
+    Require(dm.GetFDU(0)->WriteSector(0x40, {0,0,1,1}, pending.data(), false) == 0,
+            "dirty existing disk before failed mount");
+    const auto expectPreserved = [&](const std::filesystem::path& path, int index) {
+        Check(!dm.Mount(0, path.string().c_str(), false, index, false), "invalid mount succeeded");
+        Check(dm.GetFDU(0)->IsMounted() && dm.GetCurrentDisk(0) == 0,
+              "failed mount ejected original disk");
+        std::array<uint8, 256> data{};
+        Check(dm.GetFDU(0)->ReadSector(0x40, {0,0,1,1}, data.data()) == 0 && data[0] == 0x68,
+              "failed mount lost pending guest data");
+        Check(dm.GetFDU(1)->IsMounted(), "failed mount disturbed other drive");
+    };
+    expectPreserved(root / "missing.d88", 0);
+    expectPreserved(bad, 0);
+    expectPreserved(list, 0);
+    expectPreserved(second, 4);
+    Image(bad);
+    { std::fstream out(bad, std::ios::binary | std::ios::in | std::ios::out);
+      out.seekp(0x1b); out.put(char(0x30)); }
+    expectPreserved(bad, 0); // Valid container, unsupported media type.
+    Require(dm.Unmount(0), "save retained pending data");
+    SavedByte(first, 0x68);
+    Require(dm.Mount(0, first.string().c_str(), false, 0, false), "valid replacement still works");
+    Require(dm.Mount(0, first.string().c_str(), false, 0, false), "same-image remount still works");
+    std::filesystem::remove(bad); std::filesystem::remove(list);
+}
+void ReadOnlyImage(const std::filesystem::path& p) {
+    Image(p);
+    const auto original = ReadFile(p);
+#ifdef _WIN32
+    Require(SetFileAttributesW(p.c_str(), FILE_ATTRIBUTE_READONLY) != 0, "set host read-only attribute");
+    {
+        DiskManager dm;
+        Require(dm.Mount(0, p.string().c_str(), false, 0, false), "read-only fallback mount");
+        Check((dm.GetFDU(0)->SenceDeviceStatus() & 0x40) != 0, "read-only fallback lacks write protection");
+        std::array<uint8, 256> data{}; data.fill(0x99);
+        Check(dm.GetFDU(0)->WriteSector(0x40, {0,0,1,1}, data.data(), false) != 0,
+              "guest write accepted on read-only backing file");
+        Require(dm.Unmount(0), "unmount read-only image without pending writes");
+    }
+    Require(SetFileAttributesW(p.c_str(), FILE_ATTRIBUTE_NORMAL) != 0, "restore host attributes");
+#else
+    DiskManager dm;
+    Require(dm.Mount(0, p.string().c_str(), true, 0, false), "explicit read-only mount");
+    Check((dm.GetFDU(0)->SenceDeviceStatus() & 0x40) != 0, "read-only disk lacks write protection");
+    Require(dm.Unmount(0), "unmount read-only disk");
+#endif
+    Check(ReadFile(p) == original, "read-only image changed");
+}
 void Diagnostic(bool mfm, bool deleted, bool mixed) {
     FloppyDisk disk;
     Require(disk.Init(FloppyDisk::MD2D, false), "create diagnostic disk");
@@ -142,6 +203,8 @@ int main() {
             for (bool retry : {false, true}) WriteFailure(root / "write.d88", seekFailure, retry);
         UnmountFailure(root / "write.d88");
         FormatSecondDrive(root / "first.d88", root / "second.d88");
+        MountFailures(root);
+        ReadOnlyImage(root / "write.d88");
         for (bool mfm : {false, true})
             for (bool deleted : {false, true})
                 for (bool mixed : {false, true}) Diagnostic(mfm, deleted, mixed);
