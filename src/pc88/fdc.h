@@ -25,6 +25,7 @@ class Config;
 class FDC : public Device
 {
     friend class M88V::Snapshot;
+    friend struct FdcRegressionAccess;
 public:
 	enum
 	{
