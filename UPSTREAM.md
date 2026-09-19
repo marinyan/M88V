@@ -66,6 +66,11 @@ not an official release from either upstream author.
 
 ## Licensing
 
+Disk write-back, drive-specific formatting and diagnostic-read corrections were
+informed by bubio/M88M commit aee8d0061852e2b737d7456e2bd9570e584e81b1
+and GIMONS's M88g 20250513 sources. See
+[disk compatibility notes](docs/DISK_COMPATIBILITY-ja.md) for provenance and tests.
+
 The original M88 core is copyright cisc and remains subject to the original
 terms reproduced in [docs/README.md](docs/README.md#ライセンス).
 M88V new files and added code are BSD-2-Clause, as are M88M's new porting layers;

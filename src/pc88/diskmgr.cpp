@@ -981,10 +981,9 @@ void DiskManager::Update()
 //
 void DiskManager::UpdateDrive(Drive* drv)
 {
+	CriticalSection::Lock lock(cs);
 	if (!drv->holder || drv->sizechanged)
 		return;
-
-	CriticalSection::Lock lock(cs);
 	int t;
 	for (t=0; t<164 && !drv->modified[t]; t++)
 		;
@@ -1005,9 +1004,11 @@ void DiskManager::UpdateDrive(Drive* drv)
 					
 					if (tracksize <= drv->tracksize[t])
 					{
+						// Keep pending data on seek/short-write failure for retry or Unmount.
+						if (!fio->Seek(drv->trackpos[t], FileIO::begin) ||
+							!WriteTrackImage(fio, drv, t))
+							break;
 						drv->modified[t] = false;
-						fio->Seek(drv->trackpos[t], FileIO::begin);
-						WriteTrackImage(fio, drv, t);
 					}
 					else
 					{
@@ -1143,8 +1144,8 @@ bool DiskManager::FormatDisk(uint dr)
 			dest += 256;
 		}
 	}
-	drive->sizechanged = true;
-	drive->modified[0] = true;
+	drive[dr].sizechanged = true;
+	drive[dr].modified[0] = true;
 	delete[] buf;
 	return true;
 }

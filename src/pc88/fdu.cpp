@@ -361,7 +361,7 @@ uint FDU::MakeDiagData(uint flags, uint8* data, uint* size)
 				memset(dest+20, 0x4e, 22+2);	// CRC+GAP2
 				memset(dest+44, 0, 12);			// SYNC
 				dest[56] = 0xa1; dest[57] = 0xa1; // IDAM
-				dest[58] = 0xa1; dest[59] = sec->flags & FloppyDisk::deleted ? 0xfb : 0xf8;
+				dest[58] = 0xa1; dest[59] = sec->flags & FloppyDisk::deleted ? 0xf8 : 0xfb;
 				dest += 60;
 			}
 			else
@@ -372,7 +372,7 @@ uint FDU::MakeDiagData(uint flags, uint8* data, uint* size)
 				dest[ 9] = sec->id.r; dest[10] = sec->id.n;
 				memset(dest+11, 0xff, 11+2);	// CRC+GAP2
 				memset(dest+24, 0, 6);			// SYNC
-				dest[30] = sec->flags & FloppyDisk::deleted ? 0xfb : 0xf8;
+				dest[30] = sec->flags & FloppyDisk::deleted ? 0xf8 : 0xfb;
 				dest += 31;
 			}
 
@@ -398,7 +398,7 @@ uint FDU::MakeDiagData(uint flags, uint8* data, uint* size)
 			else
 			{
 				memset(dest, 0, (94+sec->size) / 2);
-				dest += (49+sec->size) / 2;
+				dest += (94+sec->size) / 2;
 			}
 		}
 	}

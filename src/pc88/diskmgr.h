@@ -88,6 +88,7 @@ private:
 
 class DiskManager
 {
+	friend struct DiskManagerTestAccess;
 public:
 	enum
 	{
