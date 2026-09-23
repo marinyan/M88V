@@ -1156,6 +1156,11 @@ void Memory::SetRAMPattern(uint8* ram, uint length)
 //	
 void Memory::SetWait()
 {
+	// PC-8001mkII: output 40H bit 4 is unused (analysis manual II, p.183).
+	// Normalize here as checkpoints can restore waittype directly, bypassing
+	// Out40. Keep the latched port value and the PC-88/SR policy unchanged.
+	if (n80mode && !n80srmode)
+		waittype = (waittype & 3) | (selgvram ? 4 : 0);
 	if (enablewait)
 	{
 		const WaitDesc& wait = waittable[waitmode + waittype];

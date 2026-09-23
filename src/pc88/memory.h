@@ -22,6 +22,7 @@ class Memory : public Device, public IGetMemoryBank
 {
     friend class M88V::MemoryInspector;
     friend class M88V::Snapshot;
+    friend class MemoryPort40TestAccess;
 public:
 	enum IDOut
 	{
