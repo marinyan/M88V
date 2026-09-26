@@ -8,6 +8,7 @@
 #include "misc.h"
 #include "opna.h"
 #include "fmgeninl.h"
+#include "zlib/zlib.h"
 
 #define BUILD_OPN
 #define BUILD_OPNA
@@ -1202,6 +1203,7 @@ OPNA::OPNA()
 		rhythm[i].sample = 0;
 		rhythm[i].pos = 0;
 		rhythm[i].size = 0;
+        rhythm[i].rate = rhythm[i].step = 0;
 		rhythm[i].volume = 0;
 		rhythm[i].level = 0;
 		rhythm[i].pan = 0;
@@ -1257,6 +1259,7 @@ void OPNA::Reset()
 {
 	reg29 = 0x1f;
 	rhythmkey = 0;
+    romRhythm.Reset();
 	rhythmtl = 0;
 	limitaddr = 0x3ffff;
 	OPNABase::Reset();
@@ -1283,6 +1286,7 @@ bool OPNA::SetRate(uint c, uint r, bool ipflag)
 //
 bool OPNA::LoadRhythmSample(const char* path)
 {
+    if (romRhythm.Load(path)) return true;
 	static const char* rhythmname[6] =
 	{
 		"BD", "SD", "TOP", "HH", "TOM", "RIM",
@@ -1343,7 +1347,7 @@ bool OPNA::LoadRhythmSample(const char* path)
 			break;
 		fsize = Max(fsize, (1<<31)/1024);
 
-		delete rhythm[i].sample;
+		delete[] rhythm[i].sample;
 		rhythm[i].sample = new int16[fsize];
 		if (!rhythm[i].sample)
 			break;
@@ -1374,6 +1378,7 @@ bool OPNA::LoadRhythmSample(const char* path)
 void OPNA::SetReg(uint addr, uint data)
 {
 	addr &= 0x1ff;
+    romRhythm.Write(addr, data);
 
 	switch (addr)
 	{
@@ -1436,6 +1441,16 @@ void OPNA::SetReg(uint addr, uint data)
 //
 void OPNA::RhythmMix(Sample* buffer, uint count)
 {
+    if (romRhythm.Available()) {
+        int gains[6];
+        for (int i=0; i<6; ++i) {
+            const int attenuation = rhythmtvol + rhythm[i].volume;
+            gains[i] = attenuation >= 128 ? 0 : int(65536.0 * pow(10.0, -attenuation * 0.75 / 20.0));
+        }
+        // OPNABase stores half the external OPNA clock.
+        romRhythm.Mix(buffer, count, clock * 2, rate, GetPrescaler(), rhythmmask_, gains);
+        return;
+    }
 	if (rhythmtvol < 128 && rhythm[0].sample && (rhythmkey & 0x3f))
 	{
 		Sample* limit = buffer + count * 2;
@@ -1469,6 +1484,35 @@ void OPNA::RhythmMix(Sample* buffer, uint count)
 // ---------------------------------------------------------------------------
 //	‰¹—ÊÝ’è
 //
+
+std::vector<uint8_t> OPNA::SaveRhythmState()
+{
+    auto state = romRhythm.Save();
+    auto put = [&](uint32_t n) { for (int i=0;i<4;++i) state.push_back(uint8_t(n>>(i*8))); };
+    put(rhythmkey); put(GetPrescaler());
+    for (auto& r : rhythm) {
+        put(r.pos); put(romRhythm.Available() ? 0 : r.size);
+        put(!romRhythm.Available() && r.sample ? uint32_t(crc32(0, reinterpret_cast<const Bytef*>(r.sample), r.size / 1024 * 2)) : 0);
+    }
+    return state;
+}
+bool OPNA::RestoreRhythmState(const std::vector<uint8_t>& state)
+{
+    if (state.size()!=292) return false;
+    auto get = [&](size_t at) { return uint32_t(state[at]) | (uint32_t(state[at+1])<<8) |
+        (uint32_t(state[at+2])<<16) | (uint32_t(state[at+3])<<24); };
+    if (get(212)>63 || get(216)>2) return false;
+    const auto current = SaveRhythmState();
+    for (int i=0;i<6;++i) {
+        const size_t at=220+i*12;
+        for (size_t j=at+4;j<at+12;++j) if (state[j]!=current[j]) return false;
+    }
+    if (!romRhythm.Restore({state.begin(),state.begin()+212})) return false;
+    rhythmkey=uint8_t(get(212)); SetPrescaler(get(216));
+    for (int i=0;i<6;++i) rhythm[i].pos=get(220+i*12);
+    return true;
+}
+
 void OPNA::SetVolumeRhythmTotal(int db)
 {
 	db = Min(db, 20);

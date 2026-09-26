@@ -10,6 +10,7 @@
 #include "fmgen.h"
 #include "fmtimer.h"
 #include "psg.h"
+#include "opna_rhythm.h"
 
 // ---------------------------------------------------------------------------
 //	class OPN/OPNA
@@ -97,6 +98,7 @@ namespace FM
 	protected:
 		void	SetParameter(Channel4* ch, uint addr, uint data);
 		void	SetPrescaler(uint p);
+        uint GetPrescaler() const { return prescale; }
 		void	RebuildTimeTable();
 		
 		int		fmvolume;
@@ -267,6 +269,9 @@ namespace FM
 		
 		bool	Init(uint c, uint r, bool  = false, const char* rhythmpath=0);
 		bool	LoadRhythmSample(const char*);
+        bool UsesRhythmROM() const { return romRhythm.Available(); }
+        std::vector<uint8_t> SaveRhythmState();
+        bool RestoreRhythmState(const std::vector<uint8_t>&);
 	
 		bool	SetRate(uint c, uint r, bool = false);
 		void 	Mix(Sample* buffer, int nsamples);
@@ -302,6 +307,7 @@ namespace FM
 		void	RhythmMix(Sample* buffer, uint count);
 
 	// ƒŠƒYƒ€‰¹Œ¹ŠÖŒW
+        OPNARhythm romRhythm;
 		Rhythm	rhythm[6];
 		int8	rhythmtl;		// ƒŠƒYƒ€‘S‘Ì‚Ì‰¹—Ê
 		int		rhythmtvol;		

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 #include "headers.h"
 #include "development/snapshot.h"
+#include "development/rom_overlay.h"
 #include "headless/headless_draw.h"
 #include "pc88/opnif.h"
 #include "pc88/diskmgr.h"
@@ -34,9 +35,13 @@ struct ROMs {
             Check(bool(f),"write synthetic ROM");
         }
         std::filesystem::current_path(directory);
+        std::ofstream rhythm(directory/"ym2608_adpcm_rom.bin",std::ios::binary);
+        std::array<char,8192> samples{};samples.fill(0x12);
+        rhythm.write(samples.data(),samples.size());Check(bool(rhythm),"write rhythm fixture");
     }
     ~ROMs() {
         std::filesystem::current_path(previous);
+        std::filesystem::remove(directory/"ym2608_adpcm_rom.bin");
         for(auto name:{"N88.ROM","N80.ROM","DISK.ROM","FONT.ROM"})std::filesystem::remove(directory/name);
         std::filesystem::remove(directory);
     }
@@ -56,8 +61,11 @@ std::vector<int32> Continue(PC8801::OPNIF& o) {
 int main() {
     try {
         ROMs roms; HeadlessDraw draw; DiskManager disks; TapeManager tape; Machine pc;
+        M88V::RomOverlay overlay;std::string overlayError;
+        Check(overlay.Prepare(roms.directory.string(),"",PC8801::Config::N80,&overlayError),overlayError);
+        Check(std::filesystem::exists(std::filesystem::path(overlay.Directory())/"ym2608_adpcm_rom.bin"),"rhythm missing from ROM overlay");
         Check(disks.Init(),"disk initialization");
-        Check(pc.Init(&draw,&disks,&tape,roms.directory.string().c_str()),"core initialization");
+        Check(pc.Init(&draw,&disks,&tape,overlay.Directory().c_str()),"core initialization");
         PC8801::Config cfg{};
         cfg.basicmode=PC8801::Config::N88V2;cfg.clock=40;cfg.speed=100;cfg.mainsubratio=1;
         cfg.cpumode=PC8801::Config::msauto;cfg.flags=PC8801::Config::enableopna;
@@ -67,6 +75,9 @@ int main() {
         std::string error;std::vector<uint8_t> state,front;
         for(unsigned rate:{8000u,44100u})for(bool repeat:{false,true})for(bool eightBit:{false,true}) {
             o.SetRate(rate);
+            o.SetIndex0(0,0x11);o.WriteData0(0,63);
+            for(unsigned ch=0;ch<6;++ch){o.SetIndex0(0,0x18+ch);o.WriteData0(0,0xdf);}
+            o.SetIndex0(0,0x10);o.WriteData0(0,63);
             Reg(o,0,1);Reg(o,1,eightBit?0xc2:0xc0);
             Reg(o,2,0);Reg(o,3,0);Reg(o,4,31);Reg(o,5,0);
             Reg(o,12,0xff);Reg(o,13,0xff);Reg(o,0,0x60);

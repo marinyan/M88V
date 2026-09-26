@@ -39,3 +39,4 @@ connection.json
 !/dist/windows-x64/
 /dist/windows-x64/*
 !/dist/windows-x64/m88v.exe
+!/dist/windows-x64/LICENSE-ymfm.txt
