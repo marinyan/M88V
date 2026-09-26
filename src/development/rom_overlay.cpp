@@ -34,7 +34,10 @@ bool RomOverlay::Prepare(const std::string& directory, const std::string& prefer
     std::map<std::string, fs::path> files;
     for (const auto& entry : fs::directory_iterator(root, ec)) {
         if (ec) break;
-        if (entry.is_regular_file(ec) && Lower(entry.path().extension().u8string()) == ".rom") {
+        const auto name = Lower(entry.path().filename().u8string());
+        const bool rhythm = name == "ym2608_adpcm_rom.bin" ||
+            (name.rfind("2608_", 0) == 0 && Lower(entry.path().extension().u8string()) == ".wav");
+        if (entry.is_regular_file(ec) && (Lower(entry.path().extension().u8string()) == ".rom" || rhythm)) {
             files[Lower(entry.path().filename().u8string())] = entry.path();
         }
     }

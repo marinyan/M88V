@@ -82,6 +82,17 @@ distributions, and retain the modification/provenance documentation. The bundled
 font notices and SIL OFL are in [assets/NOTICE.md](assets/NOTICE.md) and
 [assets/OFL.txt](assets/OFL.txt). ROM data must not be redistributed with M88V.
 
+## YM2608リズムROM再生
+
+`src/third_party/ymfm` contains unmodified `ymfm.h`, `ymfm_adpcm.h`, and
+`ymfm_adpcm.cpp` from Aaron Giles's [ymfm](https://github.com/aaronsgiles/ymfm),
+commit `81aec25ccbb98f4873a255f7551ac4dadac59b4a` (BSD-3-Clause).
+Its full license is retained in `src/third_party/ymfm/LICENSE` and must accompany
+binary distributions. M88V's `OPNARhythm` adapter uses the ADPCM-A engine with
+YM2608 fixed instrument addresses and clock ratios from `ymfm_opn.cpp`.
+ROM bytes are external and are not included in the source or executable.
+See [リズム音源](docs/RHYTHM-ja.md) for setup, tests and compatibility limits.
+
 ## CMT・テープ操作の追加参考
 
 X88000 1.5.3（Manuke、2018-08-10）の作者公開ソースを参照し、M88V の USART 送信、独立した録音バッファ、T88/CMT 保存とテープ操作を追加。

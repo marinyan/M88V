@@ -131,6 +131,10 @@ void Snapshot::Runtime(PC88& p,StateCodec& c) {
         // Legacy OPN state replays registers/RAM, which restarts the decoder.
         // Preserve its cursor, predictor, interpolation and pipelined RAM reads.
         auto& a=static_cast<FM::OPNABase&>(o->opn);
+        auto rhythm=o->opn.SaveRhythmState();
+        c.Data(rhythm.data(),rhythm.size());
+        if(c.loading && !o->opn.RestoreRhythmState(rhythm))
+            throw std::runtime_error("Rhythm ROM/WAV or runtime state mismatch");
         FIELD(a,status);FIELD(a,stmask);FIELD(a,statusnext);
         FIELD(a,adpcmmask);FIELD(a,adpcmnotice);
         FIELD(a,startaddr);FIELD(a,stopaddr);FIELD(a,memaddr);FIELD(a,limitaddr);
@@ -211,7 +215,7 @@ bool Snapshot::Capture(PC88& p,const PC8801::Config& cfg,uint32_t rom,
         std::vector<uint8_t> devices(p.devlist.GetStatusSize());
         if(!p.devlist.SaveStatus(devices.data()))throw std::runtime_error("Device state capture failed");
         std::vector<uint8_t> runtime;StateCodec codec(runtime,false);Runtime(p,codec);
-        Envelope h{};std::memcpy(h.magic,"M88VSTATE",9);h.version=3;h.abi=Abi();h.rom=rom;
+        Envelope h{};std::memcpy(h.magic,"M88VSTATE",9);h.version=4;h.abi=Abi();h.rom=rom;
         h.mode=cfg.basicmode;h.clock=cfg.clock;h.eram=cfg.erambanks;h.flags=cfg.flags;h.flag2=cfg.flag2;
         h.configId=ConfigId(cfg);
         h.deviceSize=static_cast<uint32_t>(devices.size());h.runtimeSize=static_cast<uint32_t>(runtime.size());h.frontendSize=static_cast<uint32_t>(frontend.size());
@@ -227,7 +231,7 @@ bool Snapshot::Restore(PC88& p,const PC8801::Config& cfg,uint32_t rom,
         if(input.size()<sizeof(Envelope)||input.size()>maxState)throw std::runtime_error("Invalid state size");
         Envelope h{};std::memcpy(&h,input.data(),sizeof(h));
         const uint32_t coreFlags=PC8801::Config::subcpucontrol|PC8801::Config::enablewait|PC8801::Config::enableopna|PC8801::Config::opnaona8|PC8801::Config::opnona8|PC8801::Config::fv15k;
-        if(std::memcmp(h.magic,"M88VSTATE",9)||h.version!=3||h.abi!=Abi()||h.rom!=rom||h.mode!=uint32_t(cfg.basicmode)||h.clock!=uint32_t(cfg.clock)||h.eram!=cfg.erambanks||((h.flags^cfg.flags)&coreFlags)||h.configId!=ConfigId(cfg))
+        if(std::memcmp(h.magic,"M88VSTATE",9)||h.version!=4||h.abi!=Abi()||h.rom!=rom||h.mode!=uint32_t(cfg.basicmode)||h.clock!=uint32_t(cfg.clock)||h.eram!=cfg.erambanks||((h.flags^cfg.flags)&coreFlags)||h.configId!=ConfigId(cfg))
             throw std::runtime_error("State format, ROM set, machine configuration or build ABI mismatch");
         if(uint64_t(sizeof(h))+h.deviceSize+h.runtimeSize+h.frontendSize!=input.size()||h.frontendSize!=frontend.size()||h.crc!=Sum(input.data()+sizeof(h),input.size()-sizeof(h)))
             throw std::runtime_error("State checksum/length mismatch");
