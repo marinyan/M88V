@@ -13,7 +13,7 @@
 
 // c86ctl/Romeo (real-OPNA passthrough) is Win32-only and lives under
 // src/win32/romeo/. The portable build links against a no-op stub so the
-// fmgen emulated OPNA path is the only one taken at runtime.
+// software synthesis is the only path taken at runtime.
 #if defined(_WIN32) && !defined(M88_PORTABLE)
 #include "romeo/piccolo.h"
 #else
@@ -31,12 +31,7 @@ using namespace PC8801;
 
 #define ROMEO_JULIET		0
 
-// ---------------------------------------------------------------------------
-//	�v���X�P�[���̐ݒ�l
-//	static �ɂ���̂́CFMGen �̐����ɂ��C������ OPN ���قȂ�N���b�N��
-//	���邱�Ƃ��o���Ȃ����߁D
-//
-int OPNIF::prescaler = 0x2d;
+// Each board retains its own prescaler across output-rate changes.
 
 // ---------------------------------------------------------------------------
 //	�����E�j��
@@ -86,6 +81,9 @@ bool OPNIF::Init(IOBus* b, int intrport, int io, Scheduler* s, const char* romDi
 	if (!opn.Init(clock, 8000, 0, rhythmPath.empty() ? nullptr : rhythmPath.c_str()))
 		return false;
 
+#ifndef USE_OPN
+    opn.SetFMChip(opnamode);
+#endif
 	prevtime = scheduler->GetTime();
 	TimeEvent(1);
 	

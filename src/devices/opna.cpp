@@ -1260,6 +1260,7 @@ void OPNA::Reset()
 	reg29 = 0x1f;
 	rhythmkey = 0;
     romRhythm.Reset();
+    fm.Reset();
 	rhythmtl = 0;
 	limitaddr = 0x3ffff;
 	OPNABase::Reset();
@@ -1378,6 +1379,12 @@ bool OPNA::LoadRhythmSample(const char* path)
 void OPNA::SetReg(uint addr, uint data)
 {
 	addr &= 0x1ff;
+    // Enforce YM2203's register space even for direct callers and legacy state replay.
+    if (!fm.IsOPNA()) {
+        if (addr >= 0x100 || (addr >= 0x10 && addr < 0x20) || addr == 0x22 ||
+            addr == 0x29 || (addr == 0x28 && (data & 4))) return;
+    }
+    fm.Write(addr, data);
     romRhythm.Write(addr, data);
 
 	switch (addr)
@@ -1543,10 +1550,15 @@ void OPNA::SetVolumeADPCM(int db)
 //
 void OPNA::Mix(Sample* buffer, int nsamples)
 {
-	FMMix(buffer, nsamples);
-	psg.Mix(buffer, nsamples);
-	ADPCMBMix(buffer, nsamples);
-	RhythmMix(buffer, nsamples);
+    if (nsamples <= 0) return;
+    const uint hidden = fm.IsOPNA() && !(reg29 & 0x80) ? 0x38 : 0;
+    fm.Mix(buffer, uint(nsamples), fm.IsOPNA() ? clock * 2 : clock,
+           rate, GetPrescaler(), fmChannelMask | hidden, fmvolume, 63 & ~hidden);
+    psg.Mix(buffer, nsamples);
+    if (fm.IsOPNA()) {
+        ADPCMBMix(buffer, nsamples);
+        RhythmMix(buffer, nsamples);
+    }
 }
 
 #endif // BUILD_OPNA

@@ -109,7 +109,53 @@ int main() {
         for(int i=0;i<75;++i)expected.push_back(o.ReadData1(0));
         Check(M88V::Snapshot::Restore(pc,cfg,123,state,front,error),error);
         for(auto value:expected)Check(o.ReadData1(0)==value,"ADPCM RAM read pipeline diverged");
+        // The same board settings must select independent physical FM cores at
+        // both CPU speeds. Exercise the actual scheduler and precise checkpoint.
+        for(int cpuClock:{40,80})for(int flags:{0,int(PC8801::Config::enableopna),
+            int(PC8801::Config::opnona8),int(PC8801::Config::opnaona8),
+            int(PC8801::Config::enableopna|PC8801::Config::opnona8),
+            int(PC8801::Config::enableopna|PC8801::Config::opnaona8)}) {
+            cfg.clock=cpuClock;cfg.flags=flags;
+            pc.ApplyConfig(&cfg);pc.Reset();pc.ConfigureDisplay();
+            auto& second=*pc.GetOPN2();
+            Check(o.UsesOPNA()==bool(flags&PC8801::Config::enableopna),"primary FM chip selection");
+            Check(second.UsesOPNA()==bool(flags&PC8801::Config::opnaona8),"expansion FM chip selection");
+            for(auto board:{&o,&second}) {
+                const auto write=[&](unsigned r,unsigned v){board->SetIndex0(0,r);board->WriteData0(0,v);};
+                board->SetRate(44100);
+                for(unsigned slot=0;slot<4;++slot) {
+                    write(0x30+slot*4,1);write(0x40+slot*4,slot==3?16:127);
+                    write(0x50+slot*4,31);write(0x80+slot*4,15);
+                }
+                write(0xb0,0);write(0xb4,0xc0);write(0xa4,0x22);write(0xa0,0x69);
+                write(0x28,0xf0);write(0x24,0x80);write(0x25,0);write(0x27,5);
+            }
+            o.SetIndex0(0,0x2e);second.SetIndex0(0,0x2f);
+            const auto continuation=[&]() {
+                std::vector<int32_t> result;
+                for(int i=0;i<128;++i) {
+                    pc.Scheduler::Proceed(23);
+                    std::array<int32,22> samples{};
+                    o.Mix(samples.data(),11);second.Mix(samples.data(),11);
+                    result.insert(result.end(),samples.begin(),samples.end());
+                    result.push_back(o.ReadStatus(0));result.push_back(second.ReadStatus(0));
+                }
+                return result;
+            };
+            pc.Scheduler::Proceed(71);
+            Check(M88V::Snapshot::Capture(pc,cfg,123,front,state,error),error);
+            const auto reference=continuation();
+            Check(M88V::Snapshot::Restore(pc,cfg,123,state,front,error),error);
+            // A sample-rate refresh must not copy the expansion board's divider
+            // into the onboard chip (the old OPNIF prescaler was static).
+            o.SetRate(44100);second.SetRate(44100);
+            Check(continuation()==reference,"dual FM/timer/checkpoint or independent prescaler mismatch");
+            Check((o.ReadStatus(0)&1)!=0,"FM timer did not expire at selected CPU speed");
+            const auto flags2=flags&(PC8801::Config::opnona8|PC8801::Config::opnaona8);
+            Check(flags2 ? (second.ReadStatus(0)&1)!=0 : second.ReadStatus(0)==0xff,"expansion timer/disabled board");
+        }
         std::cout<<"ADPCM checkpoint: one-shot/repeat samples, EOS, RAM read pipeline passed\n";
+        std::cout<<"Dual OPN/OPNA selection, independent prescalers and FM/timer checkpoints at 4/8 MHz passed\n";
         return 0;
     }catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
 }

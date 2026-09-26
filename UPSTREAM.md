@@ -82,16 +82,21 @@ distributions, and retain the modification/provenance documentation. The bundled
 font notices and SIL OFL are in [assets/NOTICE.md](assets/NOTICE.md) and
 [assets/OFL.txt](assets/OFL.txt). ROM data must not be redistributed with M88V.
 
-## YM2608リズムROM再生
+## YM2203/YM2608 FM・リズムROM再生
 
-`src/third_party/ymfm` contains unmodified `ymfm.h`, `ymfm_adpcm.h`, and
-`ymfm_adpcm.cpp` from Aaron Giles's [ymfm](https://github.com/aaronsgiles/ymfm),
+`src/third_party/ymfm` contains unmodified `ymfm.h`, `ymfm_adpcm.h/.cpp`,
+`ymfm_fm.h/.ipp`, `ymfm_opn.h/.cpp`, and `ymfm_ssg.h/.cpp`
+from Aaron Giles's [ymfm](https://github.com/aaronsgiles/ymfm),
 commit `81aec25ccbb98f4873a255f7551ac4dadac59b4a` (BSD-3-Clause).
 Its full license is retained in `src/third_party/ymfm/LICENSE` and must accompany
 binary distributions. M88V's `OPNARhythm` adapter uses the ADPCM-A engine with
 YM2608 fixed instrument addresses and clock ratios from `ymfm_opn.cpp`.
+The `OPNFM` adapter selects the YM2203 or YM2608 FM engine independently for
+each board and follows the corresponding upstream DAC conversion. Existing
+fmgen SSG, ADPCM-B and scheduler-driven timer/IRQ handling remain in use.
 ROM bytes are external and are not included in the source or executable.
-See [リズム音源](docs/RHYTHM-ja.md) for setup, tests and compatibility limits.
+See [FM音源](docs/FM-ja.md) and [リズム音源](docs/RHYTHM-ja.md) for setup, tests
+and compatibility limits.
 
 ## CMT・テープ操作の追加参考
 

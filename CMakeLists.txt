@@ -113,6 +113,8 @@ list(FILTER PC88_SRC    EXCLUDE REGEX "ioview\\.cpp$")
 
 add_library(m88core STATIC
     src/third_party/ymfm/ymfm_adpcm.cpp
+    src/third_party/ymfm/ymfm_opn.cpp
+    src/third_party/ymfm/ymfm_ssg.cpp
     ${COMMON_SRC}
     ${DEVICES_SRC}
     ${PC88_SRC}
@@ -199,6 +201,9 @@ if(M88M_BUILD_HEADLESS)
         add_test(NAME rtc_timing_test COMMAND rtc_timing_test)
         add_executable(adpcm_repeat_test src/tests/adpcm_repeat_test.cpp)
         add_executable(opna_rhythm_test src/tests/opna_rhythm_test.cpp)
+        add_executable(opn_fm_test src/tests/opn_fm_test.cpp)
+        target_link_libraries(opn_fm_test PRIVATE m88core)
+        add_test(NAME opn_fm_test COMMAND opn_fm_test)
         target_link_libraries(opna_rhythm_test PRIVATE m88core)
         add_test(NAME opna_rhythm_test COMMAND opna_rhythm_test)
         target_link_libraries(adpcm_repeat_test PRIVATE m88core)

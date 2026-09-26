@@ -5,7 +5,7 @@
 #include <string>
 
 namespace FM {
-// YM2608 embedded ADPCM-A ROM playback. FM/SSG/ADPCM-B remain in fmgen.
+// YM2608 embedded ADPCM-A ROM playback. SSG/ADPCM-B remain in fmgen.
 class OPNARhythm : private ymfm::ymfm_interface {
 public:
     OPNARhythm();
