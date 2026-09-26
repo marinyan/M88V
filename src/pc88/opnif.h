@@ -62,7 +62,19 @@ public:
 	bool IFCALL LoadStatus(const uint8* status);
 	
 	void Enable(bool en) { enable = en; }
-	void SetOPNMode(bool _opna) { opnamode = _opna; }
+	void SetOPNMode(bool _opna) {
+        opnamode = _opna;
+#ifndef USE_OPN
+        opn.SetFMChip(_opna);
+#endif
+    }
+    bool UsesOPNA() const {
+#ifndef USE_OPN
+        return opn.UsesOPNA();
+#else
+        return false;
+#endif
+    }
 	const uint8* GetRegs() { return regs; }
 	void SetChannelMask(uint ch);
 	
@@ -155,7 +167,7 @@ private:
 	
 	uint8 regs[0x200];
 
-	static int prescaler;
+	int prescaler = 0x2d;
 
 //	static OPNIF* romeo_user;
 

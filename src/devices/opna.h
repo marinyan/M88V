@@ -8,6 +8,7 @@
 #define FM_OPNA_H
 
 #include "fmgen.h"
+#include "opn_fm.h"
 #include "fmtimer.h"
 #include "psg.h"
 #include "opna_rhythm.h"
@@ -263,12 +264,18 @@ namespace FM
 	//	YM2608(OPNA) ---------------------------------------------------
 	class OPNA : public OPNABase
 	{
+        friend class M88V::Snapshot;
 	public:
 		OPNA();
 		virtual ~OPNA();
 		
 		bool	Init(uint c, uint r, bool  = false, const char* rhythmpath=0);
 		bool	LoadRhythmSample(const char*);
+        void SetFMChip(bool opna) { fm.Select(opna); }
+        bool UsesOPNA() const { return fm.IsOPNA(); }
+        void SetChannelMask(uint mask) { fmChannelMask = mask & 63; OPNABase::SetChannelMask(mask); }
+        std::vector<uint8_t> SaveFMState() { return fm.Save(); }
+        bool RestoreFMState(const std::vector<uint8_t>& state) { return fm.Restore(state); }
         bool UsesRhythmROM() const { return romRhythm.Available(); }
         std::vector<uint8_t> SaveRhythmState();
         bool RestoreRhythmState(const std::vector<uint8_t>&);
@@ -307,6 +314,9 @@ namespace FM
 		void	RhythmMix(Sample* buffer, uint count);
 
 	// ƒŠƒYƒ€‰¹Œ¹ŠÖŒW
+        void TimerA() override { fm.TimerA(); }
+        OPNFM fm;
+        uint fmChannelMask = 0;
         OPNARhythm romRhythm;
 		Rhythm	rhythm[6];
 		int8	rhythmtl;		// ƒŠƒYƒ€‘S‘Ì‚Ì‰¹—Ê
