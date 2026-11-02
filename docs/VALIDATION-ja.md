@@ -1,5 +1,29 @@
 # M88Vの検証
 
+## Headless音声・動画保存（2026-11-02）
+
+Windows x64 / MSVCで実施。
+
+- CTest 28件成功。追加の`headless_media_test`は合成ROMからCPU経由でFM/SSG/BEEPを発音し、
+  CPU時間とPCM長の一致、WAVとAVI内音声の一致、SSGトーン／ノイズ／エンベロープを含む
+  状態復元後の音声一致、実行要求の分割、日本語パス、上書き拒否、正常終了時の確定を検証。
+- 実ROMで`test_media_api.ps1`成功。認証・HTTPメソッド・開始／状態／停止・同時録音録画・
+  不正パス・二重開始・録画中のリセット拒否・ディスク2台装着中の保存・正常shutdownを確認。
+  HTTP要求間の待ち時間が録音に入らず、保存状態からの再実行でWAVがバイト単位で一致。
+- FFprobeがAVIを640×400/60fpsのPNG映像＋48kHz/16bit/stereo PCMとして認識。
+  FFmpegで全フレームをエラーなくデコードし、取り出したPCMがWAVと完全一致、
+  最終フレームのRGB画素が`/v1/frame.png`と完全一致することを確認。
+- 既存の`test_disk_api.ps1`成功。ドライブ1・2の装着／取り外し、複数枚D88選択、
+  日本語パス、書き込み保護、不正要求、認証、入力記録中の操作制限を確認。
+- `test_checkpoints.ps1`を実ROMのN/N88V1/N88V1H/N88V2で実施し、状態復元・継続実行・
+  入力リプレイ・破損拒否・別プロセス復元がすべて成功。
+- Win32 GUIもビルド成功。配布するGUI/headless EXEはビルド出力とSHA-256一致を確認。
+
+精密チェックポイントは形式6、headlessメタデータは版2。旧状態・入力リプレイは再作成が必要。
+2GiB近くまでの長時間録画、実機録音との聴感比較、各種Windows標準プレーヤーとの互換性は未確認。
+再現手順は`test_media_api.ps1 -RomDirectory <ROMフォルダ> -BuildDirectory <ビルド先>`。
+`-FFmpeg <ffmpeg.exe> -FFprobe <ffprobe.exe>`を加えると外部デコード比較も行う。
+
 ## 描画負荷軽減・入力待機の見直し
 
 2026-09-14、Windows x64 / MSVC。バイキュービックを既定に変更。

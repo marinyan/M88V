@@ -7,6 +7,7 @@
 #pragma once
 
 #include "device.h"
+namespace M88V { class Snapshot; }
 
 // ---------------------------------------------------------------------------
 
@@ -23,6 +24,7 @@ class OPNIF;
 //
 class Beep : public Device, public ISoundSource
 {
+    friend class M88V::Snapshot;
 public:
 	enum IDFunc
 	{
@@ -58,10 +60,10 @@ private:
 	};
 	
 	ISoundControl* soundcontrol;
-	int bslice;
-	int pslice;
-	int bcount;
-	int bperiod;
+	int bslice = 0;
+	int pslice = 0;
+	int bcount = 0;
+	int bperiod = 0;
 
 	uint port40;
 	uint p40mask;

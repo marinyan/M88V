@@ -50,7 +50,9 @@ try {
     }
     $state=& $ctl disk-mount -Drive 1 -Disk $multi -ConnectionFile $connection
     Check ($state.disks[0].mounted -and $state.disks[0].readonly -and $state.disks[0].image_count -eq 2 -and $state.disks[0].index -eq 0) 'mount defaults and multi image count'
-    Check ($state.disks[0].path -eq $multi) 'UTF-8 image path'
+    # The API canonicalizes paths, including parent junctions/symlinks.
+    Check ([IO.Path]::GetFileName($state.disks[0].path) -eq [IO.Path]::GetFileName($multi) -and
+        (Get-FileHash -LiteralPath $state.disks[0].path).Hash -eq $originalHash) 'UTF-8 image path'
     Check ((Request GET '/v1/status').disks[0].mounted) 'general status includes disks'
     Request POST '/v1/disk/mount?drive=1&path=missing.d88' 400 | Out-Null
     Request POST ("/v1/disk/mount?drive=1&path="+[Uri]::EscapeDataString($bad)) 400 | Out-Null

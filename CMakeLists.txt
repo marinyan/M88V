@@ -147,6 +147,7 @@ if(M88M_BUILD_HEADLESS)
     add_executable(m88_headless
         src/headless/headless_draw.cpp
         src/headless/headless_machine.cpp
+        src/headless/headless_audio.cpp src/headless/media_recorder.cpp
         src/headless/serial_port.cpp src/headless/checkpoints.cpp
         src/headless/http_server.cpp
         src/headless/matrix_keyboard.cpp
@@ -225,9 +226,16 @@ if(M88M_BUILD_HEADLESS)
         add_test(NAME environment_test COMMAND environment_test)
         add_executable(binary_loader_test src/tests/binary_loader_test.cpp
             src/headless/headless_draw.cpp src/headless/headless_machine.cpp
+            src/headless/headless_audio.cpp src/headless/media_recorder.cpp
             src/headless/serial_port.cpp src/headless/checkpoints.cpp src/headless/matrix_keyboard.cpp)
         target_link_libraries(binary_loader_test PRIVATE m88_development)
         add_test(NAME binary_loader_test COMMAND binary_loader_test)
+        add_executable(headless_media_test src/tests/headless_media_test.cpp
+            src/headless/headless_draw.cpp src/headless/headless_machine.cpp
+            src/headless/headless_audio.cpp src/headless/media_recorder.cpp
+            src/headless/serial_port.cpp src/headless/checkpoints.cpp src/headless/matrix_keyboard.cpp)
+        target_link_libraries(headless_media_test PRIVATE m88_development)
+        add_test(NAME headless_media_test COMMAND headless_media_test)
         if(WIN32)
             add_executable(native_timing_test src/tests/native_timing_test.cpp src/win32/timekeep.cpp)
             target_include_directories(native_timing_test PRIVATE src/win32)
@@ -295,6 +303,10 @@ if(M88M_BUILD_HEADLESS)
                         file(WRITE "${staging}/common/${name}" "#pragma once\n#include \"${header}\"\n")
                     endforeach()
                     set(frontend "${staging}/win32")
+                else()
+                    # Keep the same path spelling as core includes through junctions;
+                    # MSVC can otherwise parse pragma-once headers twice.
+                    set(frontend "${CMAKE_CURRENT_SOURCE_DIR}/src/win32")
                 endif()
                 add_executable(${target} src/tests/native_input_latency_bench.cpp src/tests/latency_presenter.cpp)
                 foreach(source IN LISTS frontend_sources)

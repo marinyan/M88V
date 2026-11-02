@@ -24,6 +24,8 @@ not an official release from either upstream author.
 ## Development changes carried into M88V
 
 - Deterministic, loopback-only, authenticated headless HTTP frontend.
+- Headless PCM WAV and lossless PNG/PCM AVI recording, driven by emulated CPU
+  time; SSG/BEEP synthesis phase and PCM sample remainder in checkpoints.
 - Frame stepping, direct BIN loading, keyboard matrix injection, register/memory
   inspection, PNG screenshots, T88 opening and M88DMP1 dumps.
 - GUI direct-BIN startup and PC-8001 mode selection corrections.
@@ -60,7 +62,7 @@ not an official release from either upstream author.
 - Actual CPU read/write bank inspection shared across PC-80/88 mappings.
 - Shared validated checkpoint codec, scheduler/fetch-cache restoration, headless
   emulated-time calendar, keyboard recording/replay, and GUI BIN-session checkpoints.
-  External media rollback and sample-exact audio are not included.
+  External media rollback and the GUI's host audio queue are not included.
 - Modified legacy headers and memory/calendar/scheduler sources were converted from
   CP932 to UTF-8 while retaining their original notices and comment text.
 
