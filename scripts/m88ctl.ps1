@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, Mandatory)]
-    [ValidateSet("status", "registers", "reset", "run", "load", "tape", "disks", "disk-mount", "disk-unmount", "disk-select", "serial", "serial-open", "serial-ports", "serial-close", "serial-write", "serial-read", "serial-clear", "key", "release", "capture", "memory", "dump", "shutdown")]
+    [ValidateSet("status", "capabilities", "audio-start", "audio-stop", "audio-status", "video-start", "video-stop", "video-status", "registers", "reset", "run", "load", "tape", "disks", "disk-mount", "disk-unmount", "disk-select", "serial", "serial-open", "serial-ports", "serial-close", "serial-write", "serial-read", "serial-clear", "key", "release", "capture", "memory", "dump", "shutdown")]
     [string]$Command,
     [string]$ConnectionFile = "",
     [int]$Frames = 1,
@@ -43,6 +43,21 @@ function Invoke-M88([string]$method, [string]$path) {
 }
 
 switch ($Command) {
+    "capabilities" { Invoke-M88 GET "/v1/capabilities" }
+    { $_ -in 'audio-start','video-start' } {
+        if (-not $Output) { throw '-Output is required for audio/video recording' }
+        $kind = $Command.Split('-')[0]
+        $absolute = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Output)
+        Invoke-M88 POST ("/v1/$kind/start?path=" + (Encode $absolute))
+    }
+    { $_ -in 'audio-stop','video-stop' } {
+        $kind = $Command.Split('-')[0]
+        Invoke-M88 POST "/v1/$kind/stop"
+    }
+    { $_ -in 'audio-status','video-status' } {
+        $kind = $Command.Split('-')[0]
+        Invoke-M88 GET "/v1/$kind/status"
+    }
     "status"    { Invoke-M88 GET "/v1/status" }
     "registers" { Invoke-M88 GET "/v1/registers" }
     "reset"     { Invoke-M88 POST "/v1/reset" }

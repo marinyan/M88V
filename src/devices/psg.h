@@ -6,6 +6,7 @@
 
 #ifndef PSG_H
 #define PSG_H
+namespace M88V { class Snapshot; }
 
 #define PSG_SAMPLETYPE		int32		// int32 or int16
 
@@ -41,6 +42,7 @@
 //
 class PSG
 {
+    friend class M88V::Snapshot;
 public:
 	typedef PSG_SAMPLETYPE Sample;
 	
@@ -76,9 +78,9 @@ protected:
 
 	const uint* envelop;
 	uint olevel[3];
-	uint32 scount[3], speriod[3];
+	uint32 scount[3]{}, speriod[3];
 	uint32 ecount, eperiod;
-	uint32 ncount, nperiod;
+	uint32 ncount = 0, nperiod;
 	uint32 tperiodbase;
 	uint32 eperiodbase;
 	uint32 nperiodbase;

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "headless_draw.h"
+#include "headless_audio.h"
+#include "media_recorder.h"
 #include "matrix_keyboard.h"
 #include "serial_port.h"
 #include "pc88.h"
@@ -17,6 +19,7 @@
 
 class HeadlessMachine final : public PC88 {
 public:
+    ~HeadlessMachine();
     struct Registers {
         uint16_t pc;
         uint16_t sp;
@@ -72,6 +75,11 @@ public:
     bool StopRecording(const std::string& path,std::string& error);
     bool Replay(const std::string& path,std::string& error);
     bool Recording() const { return recording_; }
+    bool StartMedia(bool video, const std::string& path, std::string& error);
+    bool StopMedia(bool video, std::string& error);
+    bool FinishMedia(std::string& error);
+    bool MediaActive() const { return audioRecording_.Active() || videoRecording_.Active(); }
+    const MediaRecorder& Media(bool video) const { return video ? videoRecording_ : audioRecording_; }
 
     Registers GetRegisters() const;
     std::vector<uint8_t> ReadMemory(const std::string& space, uint32_t address, uint32_t length, std::string* error) const;
@@ -94,6 +102,9 @@ private:
     bool diskReadOnly_[2] = {true,true};
     TapeManager tapeManager_;
     MatrixKeyboard keyboard_;
+    HeadlessAudio audio_;
+    MediaRecorder audioRecording_, videoRecording_;
+    bool FlushMedia(std::string& error);
     M88V::Debugger debugger_;
     PC8801::Config config_{};
     std::string romDirectory_;

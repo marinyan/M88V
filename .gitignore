@@ -33,10 +33,11 @@ connection.json
 *-connection.json
 *.log
 
-# Explicitly distributed Windows GUI; other generated files stay local.
+# Explicitly distributed Windows frontends; other generated files stay local.
 *.exe
 /dist/*
 !/dist/windows-x64/
 /dist/windows-x64/*
 !/dist/windows-x64/m88v.exe
+!/dist/windows-x64/m88-headless.exe
 !/dist/windows-x64/LICENSE-ymfm.txt

@@ -6,23 +6,35 @@
 #include <cstring>
 
 namespace {
-struct FrontendState {uint64_t frames=0;int32_t remaining=0;uint32_t version=1;std::array<uint8_t,16> keys{};};
+struct FrontendState {
+    uint64_t frames=0; int32_t remaining=0; uint32_t version=2;
+    std::array<uint8_t,16> keys{};
+    uint32_t audioPhase=0;
+    uint32_t reserved=0; // Explicit tail bytes keep the serialized metadata deterministic.
+};
 struct ReplayHeader {char magic[8];uint32_t stateSize,eventCount,crc;};
 }
 bool HeadlessMachine::CaptureState(std::vector<uint8_t>& bytes,std::string& error) {
     if (Serial().HostEnabled()) { error="Close the host serial endpoint before checkpointing or recording"; return false; }
-    FrontendState f{frameCount_,frameRemaining_,1,keyboard_.Rows()};
+    if (!FlushMedia(error)) return false;
+    FrontendState f{frameCount_,frameRemaining_,2,keyboard_.Rows(),audio_.Phase()};
     std::vector<uint8_t> front(sizeof(f));std::memcpy(front.data(),&f,sizeof(f));
     return M88V::Snapshot::Capture(*this,config_,romIdentity_,front,bytes,error);
 }
 bool HeadlessMachine::RestoreState(const std::vector<uint8_t>& bytes,std::string& error) {
+    if (MediaActive()) { error="Stop audio/video recording before restoring or replaying"; return false; }
     if (Serial().HostEnabled()) { error="Close the host serial endpoint before restoring or replaying"; return false; }
     // Inspect the fixed frontend trailer before the core can be changed.
     if(bytes.size()<sizeof(FrontendState)){error="Missing headless checkpoint metadata";return false;}
     FrontendState f{};std::memcpy(&f,bytes.data()+bytes.size()-sizeof(f),sizeof(f));
-    if(f.version!=1||f.remaining<0||f.remaining>100000){error="Invalid headless checkpoint metadata";return false;}
+    if(f.version!=2||f.remaining<0||f.remaining>100000||f.audioPhase>=uint32_t(config_.clock)*100000){error="Invalid or obsolete headless checkpoint metadata (audio version 2 required)";return false;}
     std::vector<uint8_t> front(sizeof(f));
-    if(!M88V::Snapshot::Restore(*this,config_,romIdentity_,bytes,front,error))return false;
+    const auto previousPhase=audio_.Phase();
+    audio_.Suspend(true);
+    const bool restored=M88V::Snapshot::Restore(*this,config_,romIdentity_,bytes,front,error);
+    audio_.Suspend(false);
+    audio_.Reset(restored?f.audioPhase:previousPhase);
+    if(!restored)return false;
     frameCount_=f.frames;frameRemaining_=f.remaining;keyboard_.SetRows(f.keys);debugger_.Clear();return true;
 }
 bool HeadlessMachine::SaveState(const std::string& path,std::string& error) {

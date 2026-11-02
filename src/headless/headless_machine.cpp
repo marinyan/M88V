@@ -2,6 +2,7 @@
 
 #include "memory.h"
 #include "pc88/calender.h"
+#include "pc88/beep.h"
 #include "development/rom_overlay.h"
 #include "development/binary_loader.h"
 
@@ -31,6 +32,12 @@ uint16_t Word(Z80Reg::wordreg value) {
 }
 
 } // namespace
+
+HeadlessMachine::~HeadlessMachine() {
+    std::string ignored;
+    FinishMedia(ignored);
+    audio_.Detach();
+}
 
 PC8801::Config HeadlessMachine::MakeDevelopmentConfig(M88V::BasicMode mode) {
     PC8801::Config cfg{};
@@ -100,6 +107,7 @@ bool HeadlessMachine::Initialize(const std::string& romDirectory, const std::str
     config_ = MakeDevelopmentConfig(mode);
     ApplyConfig(&config_);
     Reset();
+    audio_.Attach(*this);
     GetCalender()->UseEmulatedClock(this, 946684800); // 2000-01-01 UTC; local calendar representation.
     if (M88V::IsPC80(mode) && !IsN80Supported()) {
         if (error) *error = "n80_2.rom was not accepted by the M88 core";
@@ -120,8 +128,12 @@ void HeadlessMachine::ResetMachine() {
     if (com_.Connected()) { com_.Close(); Serial().EnableHost(false); }
     keyboard_.ReleaseAll();
     debugger_.Clear();
+    audio_.Suspend(true);
     ApplyConfig(&config_);
     Reset();
+    GetBEEP()->SetRate(MediaRecorder::Rate);
+    audio_.Suspend(false);
+    audio_.Reset();
     UpdateScreen(true);
     frameCount_ = 0;
     frameRemaining_ = 0;
@@ -149,9 +161,50 @@ bool HeadlessMachine::RunFrames(uint32_t frames, std::string* error) {
         diskManager_.Update();
         UpdateScreen(true);
         if (frameRemaining_ <= 0) { frameRemaining_ = 0; ++frameCount_; debugger_.FrameEnd(); }
+        std::string mediaError;
+        if (!FlushMedia(mediaError)) { if (error) *error = mediaError; return false; }
     }
     if(recording_ && frames) {inputEvents_.push_back({frames,{}});recordedFrames_+=frames;}
     return true;
+}
+
+bool HeadlessMachine::FlushMedia(std::string& error) {
+    audio_.Update(nullptr);
+    const auto samples = audio_.TakeSamples();
+    std::string wavError, aviError;
+    const bool wavOk = audioRecording_.Audio(samples, wavError);
+    bool aviOk = videoRecording_.Audio(samples, aviError);
+    if (aviOk && videoRecording_.Active() && !samples.empty())
+        aviOk = videoRecording_.Video(draw_.EncodePng(), aviError);
+    audio_.Capture(MediaActive());
+    if (!wavOk || !aviOk) { error = !wavOk ? wavError : aviError; return false; }
+    return true;
+}
+
+bool HeadlessMachine::StartMedia(bool video, const std::string& path, std::string& error) {
+    if (!initialized_) { error = "Machine is not initialized"; return false; }
+    if (!FlushMedia(error)) return false;
+    auto& recorder = video ? videoRecording_ : audioRecording_;
+    if (!recorder.Start(path, video, draw_.Width(), draw_.Height(), error)) return false;
+    audio_.Capture(true);
+    return true;
+}
+
+bool HeadlessMachine::StopMedia(bool video, std::string& error) {
+    const bool flushed = FlushMedia(error);
+    auto& recorder = video ? videoRecording_ : audioRecording_;
+    std::string stopError;
+    const bool stopped = recorder.Stop(stopError);
+    audio_.Capture(MediaActive());
+    if (flushed) error = stopError;
+    return flushed && stopped;
+}
+
+bool HeadlessMachine::FinishMedia(std::string& error) {
+    bool ok = true;
+    if (audioRecording_.Active()) ok = StopMedia(false, error);
+    if (videoRecording_.Active()) { std::string other; if (!StopMedia(true, other)) { error = other; ok = false; } }
+    return ok;
 }
 
 bool HeadlessMachine::LoadBinary(const std::string& path, uint16_t address, bool installLauncher, std::string* error) {

@@ -2,7 +2,8 @@
 param(
     [string]$BuildDirectory = "",
     [ValidateSet("Debug", "RelWithDebInfo", "Release")]
-    [string]$Configuration = "RelWithDebInfo"
+    [string]$Configuration = "RelWithDebInfo",
+    [switch]$NoPublish
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,4 +49,14 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 & ctest --test-dir $BuildDirectory -C $Configuration --output-on-failure
-exit $LASTEXITCODE
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+$builtExecutable = Join-Path $BuildDirectory "m88-headless.exe"
+if (-not (Test-Path -LiteralPath $builtExecutable -PathType Leaf)) {
+    $builtExecutable = Join-Path $BuildDirectory "$Configuration\m88-headless.exe"
+}
+if (-not $NoPublish -and (Test-Path -LiteralPath $builtExecutable -PathType Leaf)) {
+    $distributionDirectory = Join-Path $repository "dist\windows-x64"
+    New-Item -ItemType Directory -Force -Path $distributionDirectory | Out-Null
+    Copy-Item -LiteralPath $builtExecutable -Destination (Join-Path $distributionDirectory 'm88-headless.exe') -Force
+}

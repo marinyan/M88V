@@ -288,7 +288,9 @@ std::string StatusJson(const HeadlessMachine& machine) {
         << ",\"height\":" << machine.Framebuffer().Height() << "},\"registers\":"
         << RegistersJson(machine.GetRegisters()) << ",\"recording\":" << (machine.Recording()?"true":"false")
         << ",\"debug\":" << machine.Debugger().StatusJson() << ",\"disks\":" << DisksJson(machine)
-        << ",\"serial\":" << SerialJson(machine) << '}';
+        << ",\"serial\":" << SerialJson(machine)
+        << ",\"media_recording\":{\"audio\":" << (machine.Media(false).Active()?"true":"false")
+        << ",\"video\":" << (machine.Media(true).Active()?"true":"false") << "}}";
     return out.str();
 }
 
@@ -339,6 +341,37 @@ Response HandleRequest(HeadlessMachine& machine, const Request& request, const s
     const auto number = [&](const std::string& key,uint32_t fallback,uint32_t limit,uint32_t& value) {
         auto i=request.query.find(key);value=fallback;return i==request.query.end() || ParseUnsigned(i->second,limit,&value);
     };
+    if (request.path=="/v1/capabilities") {
+        if (request.method!="GET") return ErrorResponse(405,"method not allowed");
+        return JsonResponse(200,R"({"ok":true,"api_version":1,"features":["disk-mount","disk-unmount","disk-select","audio-recording","video-recording"],"audio":{"format":"wav","codec":"pcm_s16le","sample_rate":48000,"channels":2},"video":{"format":"avi","codec":"png","audio_codec":"pcm_s16le","fps":60}})");
+    }
+    for (bool video : {false,true}) {
+        const std::string base=video?"/v1/video/":"/v1/audio/";
+        if (request.path!=base+"start" && request.path!=base+"stop" && request.path!=base+"status") continue;
+        const bool status=request.path==base+"status";
+        if (request.method!=(status?"GET":"POST")) return ErrorResponse(405,"method not allowed");
+        if (!status) {
+            const bool start=request.path==base+"start";
+            if (machine.Media(video).Active()==start)
+                return ErrorResponse(409,start?"Already recording":"Not recording");
+            std::string error;
+            if (!(start?machine.StartMedia(video,query("path"),error):machine.StopMedia(video,error)))
+                return ErrorResponse(400,error);
+        }
+        const auto& media=machine.Media(video);
+        std::ostringstream out;
+        out << "{\"ok\":true,\"active\":" << (media.Active()?"true":"false")
+            << ",\"path\":\"" << JsonEscape(media.Path()) << "\",\"format\":\"" << (video?"avi":"wav")
+            << "\",\"sample_rate\":48000,\"channels\":2,\"samples\":" << media.Samples()
+            << ",\"duration_seconds\":" << double(media.Samples())/MediaRecorder::Rate
+            << ",\"frames\":" << media.Frames() << ",\"bytes\":" << media.Bytes()
+            << ",\"error\":\"" << JsonEscape(media.Error()) << '"';
+        if(video) out << ",\"fps\":60";
+        return JsonResponse(200,out.str()+'}');
+    }
+    if (machine.MediaActive() && request.method=="POST" &&
+        (request.path=="/v1/reset" || request.path=="/v1/state/load" || request.path=="/v1/replay/play"))
+        return ErrorResponse(409,"Stop audio/video recording before resetting, restoring or replaying");
     if (request.path=="/v1/serial/ports") {
         if (request.method!="GET") return ErrorResponse(405,"method not allowed");
         std::string json="{\"ok\":true,\"ports\":[";
@@ -604,6 +637,8 @@ Response HandleRequest(HeadlessMachine& machine, const Request& request, const s
         return JsonResponse(200, "{\"ok\":true,\"path\":\"" + JsonEscape(fs::absolute(fs::u8path(path->second)).string()) + "\"}");
     }
     if (request.path == "/v1/shutdown" && request.method == "POST") {
+        std::string error;
+        if (!machine.FinishMedia(error)) return ErrorResponse(500,error);
         Response response = JsonResponse(200, "{\"ok\":true,\"shutdown\":true}");
         response.shutdown = true;
         return response;

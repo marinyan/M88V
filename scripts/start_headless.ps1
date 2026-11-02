@@ -20,7 +20,8 @@ $buildDirectories = if ($BuildDirectory) {
     @(
         (Join-Path $repository "build\headless-msvc"),
         (Join-Path $repository "build\msvc-ninja"),
-        (Join-Path $repository "build\headless")
+        (Join-Path $repository "build\headless"),
+        (Join-Path $repository "dist\windows-x64")
     )
 }
 $executables = foreach ($directory in $buildDirectories) {
@@ -31,7 +32,7 @@ $executables = foreach ($directory in $buildDirectories) {
 }
 $executable = $executables | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
 if (-not $executable) {
-    throw "m88-headless.exe was not found. Run scripts\build_headless.ps1 first."
+    throw "m88-headless.exe was not found. Use dist\windows-x64 or run scripts\build_headless.ps1."
 }
 if (-not (Test-Path -LiteralPath $RomDirectory -PathType Container)) {
     throw "ROM directory does not exist: $RomDirectory"

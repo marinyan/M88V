@@ -32,10 +32,21 @@
 | --- | --- | --- |
 | `GET` | `/health` | トークン不要の生存確認 |
 | `GET` | `/v1/status` | モード、フレーム数、画面サイズ、CPUレジスタ |
+| `GET` | `/v1/capabilities` | ディスク装着・録音・録画への対応と出力形式 |
 | `GET` | `/v1/registers` | メインZ80レジスタ |
 | `POST` | `/v1/reset` | 起動時に選択したBASICモードでリセットし、全キーを解放 |
 | `POST` | `/v1/run?frames=N` | 指定フレームだけ同期実行 |
 | `POST` | `/v1/load-bin?path=...&address=C000H` | BINを物理主RAMへロードしてランチャを設置 |
+| `GET` | `/v1/disks` | ドライブ1・2の装着状態、パス、イメージ番号、書き込み保護 |
+| `POST` | `/v1/disk/mount?drive=1&path=...&index=0&readonly=1` | ディスク装着（既定は読み取り専用） |
+| `POST` | `/v1/disk/unmount?drive=1` | ディスク取り外し |
+| `POST` | `/v1/disk/select?drive=1&index=1` | 複数枚入りイメージ内のディスク切り替え |
+| `POST` | `/v1/audio/start?path=...wav` | 音声のWAV保存を開始 |
+| `POST` | `/v1/audio/stop` | WAVのヘッダを確定し保存終了 |
+| `GET` | `/v1/audio/status` | 録音状態、保存先、サンプル数、秒数、エラー |
+| `POST` | `/v1/video/start?path=...avi` | 音声付き動画のAVI保存を開始 |
+| `POST` | `/v1/video/stop` | AVIのヘッダ・索引を確定し保存終了 |
+| `GET` | `/v1/video/status` | 録画状態、保存先、フレーム数、秒数、エラー |
 | `POST` | `/v1/tape/open?path=...` | T88テープを開き、先頭へ巻き戻す |
 | `POST` | `/v1/key?name=left&down=1` | 名前指定のキー押下・解放 |
 | `POST` | `/v1/key?row=10&bit=2&down=1` | マトリクス位置指定のキー押下・解放 |
@@ -48,6 +59,60 @@
 | `POST` | `/v1/shutdown` | 応答後に正常終了 |
 
 `space`は`ram`、`tvram`、`gvram-b`、`gvram-r`、`gvram-g`を指定できる。
+
+## ディスク装着
+
+`drive`は1または2、`index`は0始まり。装着するだけではリセットしません。
+ディスクから起動する場合は、装着後に`reset`し、それから実行を進めます。
+返却されるディスクパスは、シンボリックリンク・ジャンクションを解決した絶対パスです。
+
+```powershell
+.\scripts\m88ctl.ps1 disk-mount -Drive 1 -Disk D:\images\disk1.d88
+.\scripts\m88ctl.ps1 disk-mount -Drive 2 -Disk D:\images\disk2.d88
+.\scripts\m88ctl.ps1 disks
+.\scripts\m88ctl.ps1 reset
+.\scripts\m88ctl.ps1 run -Frames 180
+.\scripts\m88ctl.ps1 disk-unmount -Drive 2
+```
+
+書き込みが必要な場合は`-ReadOnly $false`を明示します。D88の保護フラグは優先されます。
+複数枚入りD88、共有時の制限は[ディスクとシリアルAPI](MEDIA_SERIAL_API-ja.md)を参照。
+
+## 音声・動画の保存
+
+- 音声：WAV、48kHz・16bit・ステレオPCM。エミュレータ内のFM/SSG/BEEP等の出力を直接保存します。
+- 動画：AVI、640×400、60fps、可逆PNG＋同じPCM音声。外部エンコーダや音声デバイスは不要です。
+  PNG入りAVIに対応するプレーヤーを使用してください。MP4出力には対応していません。
+- 録音・録画の時間はCPUの実行時間に従います。HTTP要求間の実時間の待ちは含まれません。
+  映像は各実行フレームの画面を60fpsへ割り当て、必要に応じて重複・間引きを行います。
+  動画の末尾は音声より最大1/60秒だけ長くなる場合があります。
+- WAVとAVIは同時に保存できます。AVIだけを開始しても音声が入ります。
+  GUIのメニュー・メディア状態バーは含まず、エミュレータのフレームバッファを保存します。
+- `path`はサーバー側のパスです。保存先ディレクトリを先に作り、新しい`.wav`／`.avi`名を指定します。
+  既存ファイルは上書きしません。PowerShellの`-Output`はクライアントで絶対パスに変換します。
+- `stop`または正常な`shutdown`でファイルを確定します。強制終了した場合は未完成になることがあります。
+  1ファイルは2GiB未満、AVI索引は約100万チャンクまで。上限・書き込みエラー時は保存を終了し、APIでエラーを返します。
+- 録音・録画中はディスク装着・取り外しが可能です。リセット、状態ロード、入力リプレイ再生は一度停止してから行います。
+  `/v1/replay/record/*`による入力記録と、音声・動画のファイル保存は別の機能です。
+
+```powershell
+.\scripts\m88ctl.ps1 capabilities
+.\scripts\m88ctl.ps1 audio-start -Output build\sound.wav
+.\scripts\m88ctl.ps1 video-start -Output build\screen.avi
+.\scripts\m88ctl.ps1 run -Frames 600
+.\scripts\m88ctl.ps1 audio-stop
+.\scripts\m88ctl.ps1 video-stop
+```
+
+`start`／`stop`／`status`の応答は`active`、`path`、`format`、`sample_rate`、`channels`、
+`samples`（左右1組を1サンプルとする）、`duration_seconds`、`frames`、`bytes`、`error`を含みます。
+動画には`fps`もあります。録音のみでは`frames`は0です。停止後も直近の結果を保持します。
+`status.media_recording.audio/video`からも実行中か確認できます。
+二重開始・未開始の停止・録画中のリセット等は409、不正な保存先や形式は400、
+HTTPメソッド違いは405、認証なしは401です。
+
+保存状態からの音声再現には、SSG/BEEPの位相を含む精密チェックポイント形式6と、
+headlessメタデータ版2を使用します。旧版の状態ファイル・入力リプレイは再作成してください。
 
 ## BIN直接ロード
 

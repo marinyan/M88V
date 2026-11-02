@@ -11,6 +11,7 @@ Windows GUI での実行に加え、ローカル HTTP API からキー入力・�
 - **リズム音源**：YM2608のリズムROMをADPCMで再生。ROMがない場合は従来のWAVを使用。[設定と検証](docs/RHYTHM-ja.md)。
 - **FM音源**：OPN設定はYM2203、OPNA設定はYM2608のymfmコアで生成。本体・増設音源を個別に設定可能。[設定と検証](docs/FM-ja.md)。
 - **自動操作**：画面を開かない headless 実行、指定フレーム数の実行、キー入力、PNG 取得。
+- **APIでのメディア操作**：ドライブ1・2へのディスク装着・取り外し、WAV録音、音声付きAVI録画。
 - **デバッグ**：Z80 レジスタ・RAM/TVRAM/GVRAM の参照、メモリダンプ、CPU の読み書き別メモリマップ。
 - **計測と再現**：T-state 計測、書き込み元追跡、ウォッチ停止、命令・レジスタ履歴、状態保存・復元、入力記録・再生。
 
@@ -53,7 +54,9 @@ BIN は物理主 RAM へ読み込みます。バンク切替は行わないた�
 
 ### API で操作する
 
-headless 版を [ビルド](#ビルドと検証) してから、PowerShell 7 で起動します。
+ビルド済みの [m88-headless.exe](dist/windows-x64/m88-headless.exe) を収録しています。
+PowerShell 7で起動します。起動スクリプトはローカルビルドを優先し、見つからなければ同梱版を使用します。
+同梱版を指定する場合は`-BuildDirectory .\dist\windows-x64`を付けます。
 
 ```powershell
 .\scripts\start_headless.ps1 -RomDirectory D:\path\to\roms -BasicMode N88V2
@@ -68,6 +71,10 @@ headless 版を [ビルド](#ビルドと検証) してから、PowerShell 7 で
 起動ごとのトークン認証が必要です。接続ファイルにはトークンが含まれるため、公開・コミットしないでください。
 エンドポイントと操作例は [ローカル API](docs/HEADLESS_API-ja.md) にまとめています。
 
+録画は`m88ctl.ps1 video-start -Output build\screen.avi`、実行を進めてから`video-stop`で保存します。
+音声のみなら`audio-start -Output build\sound.wav`／`audio-stop`を使います。
+ディスク装着は`disk-mount -Drive 1 -Disk D:\images\disk.d88`です（既定は読み取り専用）。
+
 ## ドキュメント
 
 | 調べたいこと | 資料 |
@@ -75,7 +82,7 @@ headless 版を [ビルド](#ビルドと検証) してから、PowerShell 7 で
 | 対応する機種・BASIC モード、必要な ROM、環境変数 | [機種・ROM・起動設定](docs/SETUP-ja.md) |
 | T88 の作成・再生、CMT 出力の保存 | [テープ操作](docs/TAPE-ja.md) |
 | ディスク・テープ名とアクセスランプの試作 | [メディア状態バー](docs/MEDIA_STATUS-ja.md) |
-| API、BIN ロード、キー入力、画面・メモリ取得 | [ローカル API](docs/HEADLESS_API-ja.md) |
+| API、BIN ロード、キー入力、画面・メモリ取得、ディスク装着、録音・録画 | [ローカル API](docs/HEADLESS_API-ja.md) |
 | 計測、ウォッチ、状態保存、入力記録・再生 | [開発ツール](docs/DEVELOPMENT_TOOLS-ja.md) |
 | Windows GUI の構成、設定、raylib 版のビルド | [Windows GUI](docs/NATIVE_WINDOWS-ja.md) |
 | 実施済みの検証と未確認項目 | [検証範囲と結果](docs/VALIDATION-ja.md) |
@@ -90,8 +97,9 @@ Windows では C++ デスクトップ開発環境を含む Visual Studio、Windo
 .\scripts\build_headless.ps1
 ```
 
-GUI のビルドは `dist/windows-x64/m88v.exe` を更新します。
-headless のビルドスクリプトは ROM 不要の CTest も実行します。
+GUIのビルドは`dist/windows-x64/m88v.exe`を更新します。
+headlessのビルドスクリプトはROM不要のCTestを実行し、成功後に`dist/windows-x64/m88-headless.exe`を更新します。
+配布先を更新しない場合は`-NoPublish`を付けます。
 
 ```powershell
 # ビルド後にテストだけ実行
@@ -101,6 +109,8 @@ ctest --test-dir build/headless-msvc --output-on-failure
 .\scripts\test_development_modes.ps1 -RomDirectory D:\path\to\roms
 .\scripts\test_debug_tools.ps1 -RomDirectory D:\path\to\roms
 .\scripts\test_checkpoints.ps1 -RomDirectory D:\path\to\roms
+.\scripts\test_disk_api.ps1 -RomDirectory D:\path\to\roms
+.\scripts\test_media_api.ps1 -RomDirectory D:\path\to\roms
 ```
 
 M88M 由来の macOS / Linux / FreeBSD / Haiku 向けビルド設定も保持しています。
